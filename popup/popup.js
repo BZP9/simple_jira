@@ -213,17 +213,20 @@ function syncEndTimeFromDurationInputs() {
   const mins = parseInt(elements.durationMinutes.value) || 0;
   const totalMinutes = hours * 60 + mins;
 
-  if (totalMinutes > 0) {
-    const start = elements.startTime.value;
-    if (start) {
-      const [startH, startM] = start.split(":").map(Number);
-      const startMinutes = startH * 60 + startM;
-      const endMinutes = startMinutes + totalMinutes;
+  const start = elements.startTime.value;
+  if (start) {
+    const [startH, startM] = start.split(":").map(Number);
+    const startMinutes = startH * 60 + startM;
+    let endMinutes = startMinutes + totalMinutes;
 
-      const endH = Math.floor(endMinutes / 60) % 24;
-      const endM = endMinutes % 60;
-      elements.endTime.value = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
+    // Cap at 23:59 to prevent invalid times
+    if (endMinutes >= 24 * 60) {
+      endMinutes = 23 * 60 + 59;
     }
+
+    const endH = Math.floor(endMinutes / 60);
+    const endM = endMinutes % 60;
+    elements.endTime.value = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
   }
 }
 
@@ -1031,7 +1034,8 @@ function selectTicket(key, summary) {
 
   // Set smart start time based on existing worklogs
   setSmartStartTime();
-  // Update displays based on current input mode
+  // Sync both duration inputs and badge display
+  syncDurationInputsFromEndTime();
   updateDurationBadgeDisplay();
   saveRecentTicket(key);
 }
@@ -1198,10 +1202,11 @@ async function submitWorklog() {
     return;
   }
 
-  // Disable button to prevent double-clicks
+  // Disable button and show full-screen loading
   isSubmitting = true;
   elements.submitWorklog.disabled = true;
   elements.submitWorklog.textContent = "Logging...";
+  showLoading("Logging...");
 
   // Create proper ISO 8601 timestamp with user's local timezone
   // Jira expects format like: 2024-01-14T09:00:00.000+0800
@@ -1258,8 +1263,21 @@ async function submitWorklog() {
 
     showStatus(`Logged ${formatMinutes(durationMinutes)} to ${selectedTicket.key}`, "success");
 
-    // Clear form
+    // Clear description but keep ticket selected for consecutive logs
     elements.worklogDesc.value = "";
+
+    // Update start time to the end time for quick consecutive logging
+    const prevEnd = elements.endTime.value;
+    elements.startTime.value = prevEnd;
+
+    // Update end time based on new start (uses smart defaults)
+    const [endH, endM] = prevEnd.split(":").map(Number);
+    const newStartMinutes = endH * 60 + endM;
+    updateDefaultEndTime(newStartMinutes);
+
+    // Sync duration display
+    syncDurationInputsFromEndTime();
+    updateDurationBadgeDisplay();
 
     // Reload worklogs for the selected date to reflect actual logged time (force refresh to update cache)
     scheduleWorklogLoad(date, true);
@@ -1273,18 +1291,75 @@ async function submitWorklog() {
   }
 }
 
+function showLoading(message = "Logging...") {
+  // Clear any existing timeout
+  if (statusTimeout) {
+    clearTimeout(statusTimeout);
+    statusTimeout = null;
+  }
+
+  elements.statusMessage.className = "status-message loading";
+  elements.statusMessage.textContent = sanitizeString(message, 200);
+
+  // Trigger reflow to ensure transition works
+  elements.statusMessage.offsetHeight;
+
+  // Add show class to fade in
+  elements.statusMessage.classList.add("show");
+}
+
 function showStatus(message, type) {
   // Clear any existing timeout
   if (statusTimeout) {
     clearTimeout(statusTimeout);
     statusTimeout = null;
   }
-  elements.statusMessage.textContent = sanitizeString(message, 200);
-  elements.statusMessage.className = `status-message ${type}`;
 
-  statusTimeout = setTimeout(() => {
-    elements.statusMessage.textContent = "";
+  if (type === "error") {
+    // Error: show modal with OK button that user must dismiss
+    elements.statusMessage.className = "status-message error";
+    elements.statusMessage.innerHTML = `
+      <div class="error-content">${escapeHtml(sanitizeString(message, 500))}</div>
+      <button class="error-dismiss">OK</button>
+    `;
+    elements.statusMessage.offsetHeight;
+    elements.statusMessage.classList.add("show");
+    elements.statusMessage.querySelector(".error-dismiss").addEventListener("click", dismissStatus);
+  } else if (type === "success") {
+    // Success: transition from loading gray to green, then auto-dismiss
+    elements.statusMessage.textContent = sanitizeString(message, 200);
+    elements.statusMessage.className = "status-message success show";
+
+    statusTimeout = setTimeout(() => {
+      elements.statusMessage.classList.remove("show");
+      setTimeout(() => {
+        elements.statusMessage.textContent = "";
+        elements.statusMessage.className = "status-message";
+      }, 300);
+      statusTimeout = null;
+    }, 700);
+  } else {
+    // Info: simple flash
+    elements.statusMessage.className = "status-message info";
+    elements.statusMessage.textContent = sanitizeString(message, 200);
+    elements.statusMessage.offsetHeight;
+    elements.statusMessage.classList.add("show");
+
+    statusTimeout = setTimeout(() => {
+      elements.statusMessage.classList.remove("show");
+      setTimeout(() => {
+        elements.statusMessage.textContent = "";
+        elements.statusMessage.className = "status-message";
+      }, 300);
+      statusTimeout = null;
+    }, 700);
+  }
+}
+
+function dismissStatus() {
+  elements.statusMessage.classList.remove("show");
+  setTimeout(() => {
+    elements.statusMessage.innerHTML = "";
     elements.statusMessage.className = "status-message";
-    statusTimeout = null;
-  }, 4000);
+  }, 100);
 }

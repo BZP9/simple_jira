@@ -605,31 +605,79 @@ header h1 {
   background: #dfe1e6;
 }
 
-/* Status Messages */
+/* Status Messages - Full screen flash */
 .status-message {
-  padding: 10px;
-  border-radius: 4px;
-  text-align: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: none;
-  margin-top: 8px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 600;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.1s ease-out;
+}
+
+.status-message.show {
+  opacity: 1;
+}
+
+.status-message.loading {
+  display: flex;
+  background: #5e6c84;
+  color: #fff;
+  transition: background 0.3s ease-out, opacity 0.1s ease-out;
+  cursor: wait;
 }
 
 .status-message.success {
-  display: block;
-  background: #e3fcef;
-  color: #006644;
+  display: flex;
+  background: #00875a;
+  color: #fff;
+  transition: background 0.3s ease-out, opacity 0.1s ease-out;
 }
 
 .status-message.error {
-  display: block;
-  background: #ffebe6;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+}
+
+.status-message.error .error-content {
+  background: #de350b;
+  padding: 16px 20px;
+  border-radius: 8px;
+  max-width: 90%;
+  word-break: break-word;
+}
+
+.status-message.error .error-dismiss {
+  background: #fff;
   color: #de350b;
+  border: none;
+  padding: 10px 32px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.status-message.error .error-dismiss:hover {
+  background: #f4f5f7;
 }
 
 .status-message.info {
-  display: block;
-  background: #deebff;
-  color: #0052cc;
+  display: flex;
+  background: #0052cc;
+  color: #fff;
 }
 
 .error-message {
