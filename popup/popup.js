@@ -11,6 +11,7 @@ let statusTimeout = null; // Track status message timeout
 let isSubmitting = false; // Prevent concurrent submissions
 let isSearching = false; // Prevent concurrent searches
 let inputMode = "endTime"; // "endTime" or "duration"
+let editingWorklog = null; // { ticketKey, id } when editing an existing worklog
 
 // Constants for validation
 const MAX_DOMAIN_LENGTH = 100;
@@ -48,7 +49,8 @@ function initElements() {
   elements.loginBtn = document.getElementById("login-btn");
   elements.loginError = document.getElementById("login-error");
 
-  // Main page - Date/Time picker
+  // Main page - Header
+  elements.refreshBtn = document.getElementById("refresh-btn");
   elements.logoutBtn = document.getElementById("logout-btn");
   elements.sizeSm = document.getElementById("size-sm");
   elements.sizeMd = document.getElementById("size-md");
@@ -82,6 +84,18 @@ function initElements() {
   elements.submitWorklog = document.getElementById("submit-worklog");
   elements.statusMessage = document.getElementById("status-message");
 
+  // Pinned tickets
+  elements.pinnedTickets = document.getElementById("pinned-tickets");
+  elements.pinTicket = document.getElementById("pin-ticket");
+
+  // Last unlogged day
+  elements.lastUnloggedDay = document.getElementById("last-unlogged-day");
+
+  // Auto-advance & presets
+  elements.autoAdvance = document.getElementById("auto-advance");
+  elements.presetDescriptions = document.getElementById("preset-descriptions");
+  elements.saveDescPreset = document.getElementById("save-desc-preset");
+
   // Duration/End time toggle
   elements.endTimeContainer = document.getElementById("end-time-container");
   elements.durationInputContainer = document.getElementById("duration-input-container");
@@ -102,9 +116,10 @@ function initElements() {
 }
 
 function setupEventListeners() {
-  // Login
+  // Login / Refresh
   elements.loginBtn.addEventListener("click", handleLogin);
   elements.logoutBtn.addEventListener("click", handleLogout);
+  elements.refreshBtn.addEventListener("click", handleRefresh);
 
   // Size buttons
   elements.sizeSm.addEventListener("click", () => setPopupSize("sm"));
@@ -163,6 +178,20 @@ function setupEventListeners() {
   elements.worklogLoadStatus.addEventListener("click", () => {
     scheduleWorklogLoad(elements.workDate.value, true);
   });
+
+  // Pin ticket
+  elements.pinTicket.addEventListener("click", togglePinTicket);
+
+  // Last unlogged day
+  elements.lastUnloggedDay.addEventListener("click", jumpToLastUnloggedDay);
+
+  // Auto-advance preference
+  elements.autoAdvance.addEventListener("change", async () => {
+    await browser.storage.local.set({ autoAdvance: elements.autoAdvance.checked });
+  });
+
+  // Save description preset
+  elements.saveDescPreset.addEventListener("click", saveDescriptionPreset);
 
   // Load saved input mode preference
   loadInputModePreference();
@@ -345,13 +374,15 @@ async function checkLoginStatus() {
     "jiraDomain",
     "jiraEmail",
     "jiraToken",
-    "dailyHours"
+    "dailyHours",
+    "autoAdvance"
   ]);
 
   if (data.jiraDomain && data.jiraEmail && data.jiraToken) {
     // Already logged in, show main page
     dailyHoursTarget = data.dailyHours || 8;
     elements.dailyHours.value = dailyHoursTarget;
+    elements.autoAdvance.checked = data.autoAdvance || false;
     showMainPage();
     loadTodayWorklogs();
   } else {
@@ -368,6 +399,8 @@ function showLoginPage() {
 function showMainPage() {
   elements.loginPage.style.display = "none";
   elements.mainPage.style.display = "block";
+  renderPinnedTickets();
+  renderDescriptionPresets();
 }
 
 async function setPopupSize(size) {
@@ -496,6 +529,26 @@ async function handleLogout() {
   showLoginPage();
 }
 
+async function handleRefresh() {
+  elements.refreshBtn.disabled = true;
+
+  // Clear all cached worklog data
+  await clearWorklogCache();
+
+  // Reset current state
+  loggedMinutesToday = 0;
+  loggedWorklogs = [];
+  updateHoursDisplay();
+
+  // Reload worklogs for the current date (force refresh)
+  scheduleWorklogLoad(elements.workDate.value, true);
+
+  // Re-render pinned tickets (in case storage changed externally)
+  renderPinnedTickets();
+
+  elements.refreshBtn.disabled = false;
+}
+
 function normalizeDomain(domain) {
   if (!domain || typeof domain !== "string") return "";
   domain = domain.replace(/^https?:\/\//, "");
@@ -568,16 +621,26 @@ function updateHoursDisplay() {
     elements.worklogList.innerHTML = "";
   } else {
     elements.worklogList.innerHTML = loggedWorklogs
-      .map(
-        (log) => `
-        <div class="worklog-entry">
+      .map((log, idx) => {
+        const startTime = log.started ? log.started.substring(11, 16) : "";
+        return `
+        <div class="worklog-entry" data-index="${idx}">
           <span class="worklog-ticket">${escapeHtml(log.ticketKey || "")}</span>
+          <span class="worklog-time">${startTime}</span>
           <span class="worklog-comment">${log.comment ? escapeHtml(log.comment) : "-"}</span>
           <span class="worklog-duration">${formatMinutes(log.minutes || 0)}</span>
         </div>
-      `
-      )
+      `;
+      })
       .join("");
+
+    // Add click handlers for toggle actions
+    elements.worklogList.querySelectorAll(".worklog-entry").forEach(entry => {
+      entry.addEventListener("click", () => {
+        const idx = parseInt(entry.dataset.index);
+        toggleWorklogActions(idx, entry);
+      });
+    });
   }
 }
 
@@ -723,13 +786,19 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
       loggedMinutesToday = cached.totalMinutes;
       loggedWorklogs = [...cached.worklogs]; // Copy array to avoid reference issues
       updateHoursDisplay();
+      // Recalculate start time based on cached worklogs if a ticket is selected
+      if (selectedTicket) {
+        setSmartStartTime();
+        syncDurationInputsFromEndTime();
+        updateDurationBadgeDisplay();
+      }
       showWorklogLoadStatus("From cache (tap to refresh)", "info");
       return;
     }
   }
 
   if (requestId !== currentRequestId) return;
-  showWorklogLoadStatus("Loading...", "loading");
+  showWorklogLoadStatus("Connecting to Jira...", "loading");
 
   try {
     // Get current user
@@ -743,8 +812,12 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
     const me = await meResponse.json();
     const accountId = me.accountId;
 
+    if (requestId !== currentRequestId) return;
+    showWorklogLoadStatus("Searching for tickets...", "loading");
+
     // Get tickets to check - combine JQL search + recent tickets list
     let ticketKeys = [];
+    let jqlTicketCount = 0;
 
     // Try JQL search for worklogs on this date
     try {
@@ -755,6 +828,7 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
       if (searchResponse.ok) {
         const searchResult = await searchResponse.json();
         ticketKeys = (searchResult.issues || []).map(i => i.key);
+        jqlTicketCount = ticketKeys.length;
       }
     } catch (e) {
       // JQL search failed, continue with recent tickets
@@ -774,10 +848,17 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
       return;
     }
 
+    if (requestId !== currentRequestId) return;
+    showWorklogLoadStatus(`Found ${jqlTicketCount} tickets, fetching worklogs (0/${ticketKeys.length})...`, "loading");
+
     // Fetch worklogs from tickets and filter by date
     const result = await fetchWorklogsForDate(ticketKeys, accountId, date, domain, requestId);
 
-    if (result === null) return; // Request was cancelled
+    if (result === null) {
+      if (requestId !== currentRequestId) return;
+      showWorklogLoadStatus("Request cancelled", "info");
+      return;
+    }
 
     const { worklogs, totalMinutes } = result;
 
@@ -791,10 +872,17 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
     loggedMinutesToday = totalMinutes;
     updateHoursDisplay();
 
+    // Recalculate start time based on new date's worklogs if a ticket is selected
+    if (selectedTicket) {
+      setSmartStartTime();
+      syncDurationInputsFromEndTime();
+      updateDurationBadgeDisplay();
+    }
+
     if (worklogs.length === 0) {
       showWorklogLoadStatus("No worklogs for this date", "info");
     } else {
-      hideWorklogLoadStatus();
+      showWorklogLoadStatus(`Loaded ${worklogs.length} worklogs (${formatMinutes(totalMinutes)})`, "info");
     }
 
   } catch (err) {
@@ -810,13 +898,17 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
 async function fetchWorklogsForDate(ticketKeys, accountId, date, domain, requestId) {
   let totalSeconds = 0;
   const worklogs = [];
+  const keysToCheck = ticketKeys.slice(0, 30);
 
-  for (const ticketKey of ticketKeys.slice(0, 30)) {
+  for (let idx = 0; idx < keysToCheck.length; idx++) {
+    const ticketKey = keysToCheck[idx];
     if (requestId !== currentRequestId) return null;
+
+    showWorklogLoadStatus(`Fetching worklogs (${idx + 1}/${keysToCheck.length}): ${ticketKey}...`, "loading");
 
     try {
       const response = await jiraFetch(
-        `https://${domain}/rest/api/3/issue/${ticketKey}/worklog`
+        `https://${domain}/rest/api/3/issue/${ticketKey}/worklog?maxResults=5000`
       );
 
       if (!response.ok) continue;
@@ -829,6 +921,7 @@ async function fetchWorklogsForDate(ticketKeys, accountId, date, domain, request
           const minutes = Math.round((log.timeSpentSeconds || 0) / 60);
           totalSeconds += log.timeSpentSeconds || 0;
           worklogs.push({
+            id: log.id,
             ticketKey,
             minutes,
             comment: extractCommentText(log.comment),
@@ -1032,6 +1125,9 @@ function selectTicket(key, summary) {
   elements.searchResults.innerHTML = "";
   elements.ticketSearch.value = "";
 
+  // Update pin button state
+  updatePinButtonState(key);
+
   // Set smart start time based on existing worklogs
   setSmartStartTime();
   // Sync both duration inputs and badge display
@@ -1132,8 +1228,13 @@ function updateDefaultEndTime(startMinutes) {
 
 function clearSelectedTicket() {
   selectedTicket = null;
+  editingWorklog = null;
   elements.worklogSection.style.display = "none";
   elements.worklogDesc.value = "";
+  elements.submitWorklog.textContent = "Log Work";
+  // Reset pin button
+  elements.pinTicket.innerHTML = "&#9744;";
+  elements.pinTicket.classList.remove("pinned");
 }
 
 async function submitWorklog() {
@@ -1241,13 +1342,23 @@ async function submitWorklog() {
   }
 
   try {
-    const response = await jiraFetch(
-      `https://${domain}/rest/api/3/issue/${selectedTicket.key}/worklog`,
-      {
-        method: "POST",
-        body: JSON.stringify(payload)
-      }
-    );
+    let url;
+    let method;
+
+    if (editingWorklog) {
+      // Update existing worklog: PUT to the original ticket's worklog
+      url = `https://${domain}/rest/api/3/issue/${editingWorklog.ticketKey}/worklog/${editingWorklog.id}`;
+      method = "PUT";
+    } else {
+      // Create new worklog
+      url = `https://${domain}/rest/api/3/issue/${selectedTicket.key}/worklog`;
+      method = "POST";
+    }
+
+    const response = await jiraFetch(url, {
+      method: method,
+      body: JSON.stringify(payload)
+    });
 
     if (!response.ok) {
       let errorMsg = `HTTP ${response.status}`;
@@ -1261,31 +1372,70 @@ async function submitWorklog() {
       throw new Error(errorMsg);
     }
 
-    showStatus(`Logged ${formatMinutes(durationMinutes)} to ${selectedTicket.key}`, "success");
+    const isEditing = !!editingWorklog;
+    editingWorklog = null;
+    elements.submitWorklog.textContent = "Log Work";
+
+    // Calculate new remaining before deciding to advance
+    const newLoggedMinutes = loggedMinutesToday + (isEditing ? 0 : durationMinutes);
+    const targetMinutes = dailyHoursTarget * 60;
+    const newRemaining = targetMinutes - newLoggedMinutes;
+
+    showStatus(`${isEditing ? "Updated" : "Logged"} ${formatMinutes(durationMinutes)} to ${selectedTicket.key}`, "success");
 
     // Clear description but keep ticket selected for consecutive logs
     elements.worklogDesc.value = "";
 
-    // Update start time to the end time for quick consecutive logging
-    const prevEnd = elements.endTime.value;
-    elements.startTime.value = prevEnd;
+    // Check if we should auto-advance to next workday
+    if (elements.autoAdvance.checked && newRemaining <= 0) {
+      // Advance to next workday
+      const current = new Date(date);
+      current.setDate(current.getDate() + 1);
+      while (isWeekend(current)) {
+        current.setDate(current.getDate() + 1);
+      }
+      const nextDate = current.toISOString().split("T")[0];
+      elements.workDate.value = nextDate;
+      updateDateLabel();
 
-    // Update end time based on new start (uses smart defaults)
-    const [endH, endM] = prevEnd.split(":").map(Number);
-    const newStartMinutes = endH * 60 + endM;
-    updateDefaultEndTime(newStartMinutes);
+      // Reset start time to default for new day
+      elements.startTime.value = DEFAULT_START_TIME;
+      updateDefaultEndTime(9 * 60); // 09:00
+      syncDurationInputsFromEndTime();
+      updateDurationBadgeDisplay();
 
-    // Sync duration display
-    syncDurationInputsFromEndTime();
-    updateDurationBadgeDisplay();
+      // Load worklogs for the new date
+      scheduleWorklogLoad(nextDate, true);
+    } else {
+      // Update start time to the end time for quick consecutive logging
+      const prevEnd = elements.endTime.value;
+      const [endH, endM] = prevEnd.split(":").map(Number);
+      let newStartMinutes = endH * 60 + endM;
 
-    // Reload worklogs for the selected date to reflect actual logged time (force refresh to update cache)
-    scheduleWorklogLoad(date, true);
+      // Skip lunch break (12:00-13:00) for convenience
+      newStartMinutes = skipLunchBreakForConvenience(newStartMinutes);
+
+      // Format and set the new start time
+      const startH = Math.floor(newStartMinutes / 60);
+      const startM = newStartMinutes % 60;
+      elements.startTime.value = `${String(startH).padStart(2, "0")}:${String(startM).padStart(2, "0")}`;
+
+      // Update end time based on new start (uses smart defaults)
+      updateDefaultEndTime(newStartMinutes);
+
+      // Sync duration display
+      syncDurationInputsFromEndTime();
+      updateDurationBadgeDisplay();
+
+      // Reload worklogs for the selected date to reflect actual logged time (force refresh to update cache)
+      scheduleWorklogLoad(date, true);
+    }
   } catch (err) {
     showStatus(`Error: ${sanitizeString(err.message, 100)}`, "error");
   } finally {
     // Re-enable button
     isSubmitting = false;
+    editingWorklog = null;
     elements.submitWorklog.disabled = false;
     elements.submitWorklog.textContent = "Log Work";
   }
@@ -1362,4 +1512,577 @@ function dismissStatus() {
     elements.statusMessage.innerHTML = "";
     elements.statusMessage.className = "status-message";
   }, 100);
+}
+
+// ===== Pinned Tickets =====
+
+const MAX_PINNED_TICKETS = 10;
+
+async function getPinnedTickets() {
+  const data = await browser.storage.local.get(["pinnedTickets"]);
+  return data.pinnedTickets || [];
+}
+
+async function savePinnedTickets(tickets) {
+  await browser.storage.local.set({ pinnedTickets: tickets });
+}
+
+async function isTicketPinned(key) {
+  const pinned = await getPinnedTickets();
+  return pinned.some(t => t.key === key);
+}
+
+async function updatePinButtonState(key) {
+  const pinned = await isTicketPinned(key);
+  if (pinned) {
+    elements.pinTicket.innerHTML = "&#9746;";
+    elements.pinTicket.classList.add("pinned");
+    elements.pinTicket.title = "Unpin this ticket";
+  } else {
+    elements.pinTicket.innerHTML = "&#9744;";
+    elements.pinTicket.classList.remove("pinned");
+    elements.pinTicket.title = "Pin this ticket";
+  }
+}
+
+async function togglePinTicket() {
+  if (!selectedTicket) return;
+
+  const pinned = await getPinnedTickets();
+  const idx = pinned.findIndex(t => t.key === selectedTicket.key);
+
+  if (idx >= 0) {
+    // Unpin
+    pinned.splice(idx, 1);
+  } else {
+    // Pin - add to front
+    if (pinned.length >= MAX_PINNED_TICKETS) {
+      pinned.pop(); // Remove oldest
+    }
+    pinned.unshift({ key: selectedTicket.key, summary: selectedTicket.summary });
+  }
+
+  await savePinnedTickets(pinned);
+  updatePinButtonState(selectedTicket.key);
+  renderPinnedTickets();
+}
+
+async function unpinTicket(key) {
+  const pinned = await getPinnedTickets();
+  const filtered = pinned.filter(t => t.key !== key);
+  await savePinnedTickets(filtered);
+  renderPinnedTickets();
+
+  // Update pin button if this ticket is currently selected
+  if (selectedTicket && selectedTicket.key === key) {
+    updatePinButtonState(key);
+  }
+}
+
+async function renderPinnedTickets() {
+  const pinned = await getPinnedTickets();
+
+  if (pinned.length === 0) {
+    elements.pinnedTickets.innerHTML = "";
+    return;
+  }
+
+  elements.pinnedTickets.innerHTML = pinned
+    .map(t => {
+      const keyHtml = escapeHtml(t.key);
+      const summaryHtml = escapeHtml(t.summary);
+      const keyAttr = t.key.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+      const summaryAttr = (t.summary || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+      return `
+        <div class="pinned-ticket-item" data-key="${keyAttr}" data-summary="${summaryAttr}">
+          <span class="pin-indicator">&#9654;</span>
+          <span class="ticket-key">${keyHtml}</span>
+          <span class="ticket-summary">${summaryHtml}</span>
+          <button class="unpin-btn" data-key="${keyAttr}" title="Unpin">×</button>
+        </div>
+      `;
+    })
+    .join("");
+
+  // Click to select ticket
+  elements.pinnedTickets.querySelectorAll(".pinned-ticket-item").forEach(item => {
+    item.addEventListener("click", (e) => {
+      // Don't select if clicking unpin button
+      if (e.target.classList.contains("unpin-btn")) return;
+      selectTicket(item.dataset.key, item.dataset.summary);
+    });
+  });
+
+  // Unpin buttons
+  elements.pinnedTickets.querySelectorAll(".unpin-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      unpinTicket(btn.dataset.key);
+    });
+  });
+}
+
+// ===== Worklog Actions (Edit/Delete) =====
+
+function toggleWorklogActions(index, entryElement) {
+  // If already expanded, collapse it
+  const existingBar = entryElement.nextElementSibling;
+  if (existingBar && existingBar.classList.contains("worklog-actions-bar")) {
+    existingBar.remove();
+    entryElement.classList.remove("expanded");
+    return;
+  }
+
+  // Collapse any other expanded entry
+  const prevExpanded = elements.worklogList.querySelector(".worklog-entry.expanded");
+  if (prevExpanded) {
+    const prevBar = prevExpanded.nextElementSibling;
+    if (prevBar && prevBar.classList.contains("worklog-actions-bar")) prevBar.remove();
+    prevExpanded.classList.remove("expanded");
+  }
+
+  const log = loggedWorklogs[index];
+  if (!log) return;
+
+  entryElement.classList.add("expanded");
+
+  const bar = document.createElement("div");
+  bar.className = "worklog-actions-bar";
+  bar.innerHTML = `
+    <button class="worklog-action-btn action-edit">Edit</button>
+    <button class="worklog-action-btn action-delete">Delete</button>
+  `;
+
+  entryElement.after(bar);
+
+  bar.querySelector(".action-edit").addEventListener("click", (e) => {
+    e.stopPropagation();
+    loadWorklogForEdit(index);
+    bar.remove();
+    entryElement.classList.remove("expanded");
+  });
+
+  bar.querySelector(".action-delete").addEventListener("click", (e) => {
+    e.stopPropagation();
+    deleteWorklog(index);
+    bar.remove();
+    entryElement.classList.remove("expanded");
+  });
+}
+
+function loadWorklogForEdit(index) {
+  const log = loggedWorklogs[index];
+  if (!log) return;
+
+  // Select the ticket
+  selectTicket(log.ticketKey, "");
+
+  // Set the start time from the worklog
+  if (log.started) {
+    elements.startTime.value = log.started.substring(11, 16);
+  }
+
+  // Calculate end time from start + duration
+  if (log.started && log.minutes) {
+    const [h, m] = log.started.substring(11, 16).split(":").map(Number);
+    const endMinutes = h * 60 + m + log.minutes;
+    const endH = Math.floor(endMinutes / 60);
+    const endM = endMinutes % 60;
+    elements.endTime.value = `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
+  }
+
+  // Set description
+  elements.worklogDesc.value = log.comment || "";
+
+  // Sync duration display
+  syncDurationInputsFromEndTime();
+  updateDurationBadgeDisplay();
+
+  // Store the editing worklog info so we can delete the old one on submit
+  editingWorklog = { ticketKey: log.ticketKey, id: log.id };
+
+  // Change button text to indicate editing
+  elements.submitWorklog.textContent = "Update Work";
+}
+
+async function deleteWorklog(index) {
+  const log = loggedWorklogs[index];
+  if (!log || !log.id || !log.ticketKey) {
+    showStatus("Cannot delete: missing worklog info", "error");
+    return;
+  }
+
+  const domain = await getJiraDomain();
+  if (!domain) return;
+
+  showStatus("Deleting...", "loading");
+
+  try {
+    const response = await jiraFetch(
+      `https://${domain}/rest/api/3/issue/${log.ticketKey}/worklog/${log.id}`,
+      { method: "DELETE" }
+    );
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    showStatus(`Deleted worklog from ${log.ticketKey}`, "success");
+
+    // Refresh worklogs
+    scheduleWorklogLoad(elements.workDate.value, true);
+  } catch (err) {
+    showStatus(`Delete failed: ${sanitizeString(err.message, 100)}`, "error");
+  }
+}
+
+// ===== Preset Descriptions =====
+
+const MAX_PRESETS = 10;
+
+async function getDescriptionPresets() {
+  const data = await browser.storage.local.get(["descPresets"]);
+  return data.descPresets || [];
+}
+
+async function saveDescriptionPresets(presets) {
+  await browser.storage.local.set({ descPresets: presets });
+}
+
+async function saveDescriptionPreset() {
+  const desc = elements.worklogDesc.value.trim();
+  if (!desc) {
+    showStatus("Enter a description first", "error");
+    return;
+  }
+
+  const presets = await getDescriptionPresets();
+
+  // Don't add duplicates
+  if (presets.includes(desc)) {
+    showStatus("Preset already exists", "info");
+    return;
+  }
+
+  // Add to front, limit to MAX_PRESETS
+  presets.unshift(desc);
+  if (presets.length > MAX_PRESETS) presets.pop();
+
+  await saveDescriptionPresets(presets);
+  renderDescriptionPresets();
+
+  // Visual feedback on save button
+  const btn = elements.saveDescPreset;
+  btn.textContent = "Saved!";
+  btn.classList.add("saved");
+  setTimeout(() => {
+    btn.textContent = "+ Save as preset";
+    btn.classList.remove("saved");
+  }, 1500);
+}
+
+async function removeDescriptionPreset(index) {
+  const presets = await getDescriptionPresets();
+  presets.splice(index, 1);
+  await saveDescriptionPresets(presets);
+  renderDescriptionPresets();
+}
+
+async function editDescriptionPreset(index) {
+  const presets = await getDescriptionPresets();
+  const chip = elements.presetDescriptions.querySelector(`.preset-chip[data-index="${index}"]`);
+  if (!chip || !presets[index]) return;
+
+  // Switch chip to edit mode
+  chip.classList.add("editing");
+  chip.innerHTML = `
+    <input type="text" class="preset-edit-input" value="${escapeHtml(presets[index])}" maxlength="200">
+    <span class="preset-actions" style="opacity:1;max-width:50px;">
+      <button class="preset-action-btn preset-save-edit" title="Save">&#10003;</button>
+      <button class="preset-action-btn preset-cancel-edit" title="Cancel">&#10005;</button>
+    </span>
+  `;
+
+  const input = chip.querySelector(".preset-edit-input");
+  input.focus();
+  input.select();
+
+  const saveEdit = async () => {
+    const newValue = input.value.trim();
+    if (newValue && newValue !== presets[index]) {
+      // Check for duplicates
+      if (presets.includes(newValue)) {
+        input.style.borderBottom = "2px solid #de350b";
+        return;
+      }
+      presets[index] = newValue;
+      await saveDescriptionPresets(presets);
+    }
+    renderDescriptionPresets();
+  };
+
+  chip.querySelector(".preset-save-edit").addEventListener("click", (e) => {
+    e.stopPropagation();
+    saveEdit();
+  });
+
+  chip.querySelector(".preset-cancel-edit").addEventListener("click", (e) => {
+    e.stopPropagation();
+    renderDescriptionPresets();
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveEdit();
+    } else if (e.key === "Escape") {
+      renderDescriptionPresets();
+    }
+  });
+
+  input.addEventListener("click", (e) => e.stopPropagation());
+}
+
+function requestDeletePreset(index, chipElement) {
+  // If already confirming, ignore
+  if (chipElement.classList.contains("confirm-delete")) return;
+
+  chipElement.classList.add("confirm-delete");
+
+  const actionsEl = chipElement.querySelector(".preset-actions");
+  actionsEl.innerHTML = `
+    <span class="preset-confirm-btns">
+      <button class="preset-confirm-btn confirm-yes" title="Confirm delete">Del</button>
+      <button class="preset-confirm-btn confirm-no" title="Cancel">No</button>
+    </span>
+  `;
+
+  const textEl = chipElement.querySelector(".preset-text");
+  textEl.textContent = "Delete?";
+
+  actionsEl.querySelector(".confirm-yes").addEventListener("click", (e) => {
+    e.stopPropagation();
+    removeDescriptionPreset(index);
+  });
+
+  actionsEl.querySelector(".confirm-no").addEventListener("click", (e) => {
+    e.stopPropagation();
+    renderDescriptionPresets();
+  });
+
+  // Auto-cancel after 3 seconds
+  setTimeout(() => {
+    if (chipElement.classList.contains("confirm-delete")) {
+      renderDescriptionPresets();
+    }
+  }, 3000);
+}
+
+async function renderDescriptionPresets() {
+  const presets = await getDescriptionPresets();
+
+  if (presets.length === 0) {
+    elements.presetDescriptions.innerHTML = "";
+    return;
+  }
+
+  elements.presetDescriptions.innerHTML = presets
+    .map((desc, i) => {
+      const displayText = desc.length > 25 ? desc.slice(0, 25) + "\u2026" : desc;
+      const textHtml = escapeHtml(displayText);
+      const fullHtml = escapeHtml(desc);
+      return `
+        <span class="preset-chip" data-index="${i}" title="${fullHtml}">
+          <span class="preset-text">${textHtml}</span>
+          <span class="preset-actions">
+            <button class="preset-action-btn preset-edit-btn" title="Edit">\u270E</button>
+            <button class="preset-action-btn preset-delete-btn" title="Delete">\u00D7</button>
+          </span>
+        </span>
+      `;
+    })
+    .join("");
+
+  // Click preset to fill description
+  elements.presetDescriptions.querySelectorAll(".preset-chip").forEach(chip => {
+    chip.addEventListener("click", async (e) => {
+      if (e.target.closest(".preset-action-btn")) return;
+      if (chip.classList.contains("editing") || chip.classList.contains("confirm-delete")) return;
+      const presets = await getDescriptionPresets();
+      const idx = parseInt(chip.dataset.index);
+      if (presets[idx]) {
+        elements.worklogDesc.value = presets[idx];
+        // Brief highlight to confirm selection
+        chip.style.background = "#e3fcef";
+        chip.style.borderColor = "#00875a";
+        setTimeout(() => {
+          chip.style.background = "";
+          chip.style.borderColor = "";
+        }, 400);
+      }
+    });
+  });
+
+  // Edit buttons
+  elements.presetDescriptions.querySelectorAll(".preset-edit-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const chip = btn.closest(".preset-chip");
+      editDescriptionPreset(parseInt(chip.dataset.index));
+    });
+  });
+
+  // Delete buttons
+  elements.presetDescriptions.querySelectorAll(".preset-delete-btn").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const chip = btn.closest(".preset-chip");
+      requestDeletePreset(parseInt(chip.dataset.index), chip);
+    });
+  });
+}
+
+// ===== Last Unlogged Day =====
+
+function isWeekend(date) {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+}
+
+// Standalone worklog fetcher - does NOT use currentRequestId so it won't be
+// cancelled by concurrent scheduleWorklogLoad/refresh calls
+async function getLoggedMinutesForDate(dateStr, accountId, domain) {
+  // Check cache first
+  const cached = await getCachedWorklogs(dateStr);
+  if (cached) return cached.totalMinutes;
+
+  // Query Jira directly (no currentRequestId dependency)
+  try {
+    let ticketKeys = [];
+
+    // Try JQL search for worklogs on this date
+    try {
+      const jql = `worklogDate = "${dateStr}" AND worklogAuthor = currentUser()`;
+      const searchResponse = await jiraFetch(
+        `https://${domain}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50&fields=key`
+      );
+      if (searchResponse.ok) {
+        const searchResult = await searchResponse.json();
+        ticketKeys = (searchResult.issues || []).map(iss => iss.key);
+      }
+    } catch (e) {
+      // JQL search failed, continue with recent tickets
+    }
+
+    // Also include recent tickets (same as loadWorklogsForDate)
+    const stored = await browser.storage.local.get(["recentTickets"]);
+    const recentTickets = stored.recentTickets || [];
+    ticketKeys = [...new Set([...ticketKeys, ...recentTickets])];
+
+    if (ticketKeys.length === 0) return 0;
+
+    // Fetch worklogs directly without fetchWorklogsForDate (avoids currentRequestId race)
+    let totalSeconds = 0;
+    const worklogs = [];
+
+    for (const ticketKey of ticketKeys.slice(0, 30)) {
+      try {
+        const response = await jiraFetch(
+          `https://${domain}/rest/api/3/issue/${ticketKey}/worklog?maxResults=5000`
+        );
+        if (!response.ok) continue;
+
+        const data = await response.json();
+        for (const log of data.worklogs || []) {
+          if (log.author?.accountId === accountId && log.started?.startsWith(dateStr)) {
+            const minutes = Math.round((log.timeSpentSeconds || 0) / 60);
+            totalSeconds += log.timeSpentSeconds || 0;
+            worklogs.push({
+              id: log.id,
+              ticketKey,
+              minutes,
+              comment: extractCommentText(log.comment),
+              started: log.started
+            });
+          }
+        }
+      } catch (err) {
+        // Skip failed tickets
+      }
+    }
+
+    const totalMinutes = Math.round(totalSeconds / 60);
+    worklogs.sort((a, b) => (a.started || "").localeCompare(b.started || ""));
+    await setCachedWorklogs(dateStr, worklogs, totalMinutes);
+    return totalMinutes;
+  } catch (e) {
+    return 0;
+  }
+}
+
+async function jumpToLastUnloggedDay() {
+  const domain = await getJiraDomain();
+  if (!domain) {
+    showStatus("Please login first", "error");
+    return;
+  }
+
+  elements.lastUnloggedDay.disabled = true;
+  elements.lastUnloggedDay.textContent = "Connecting...";
+
+  try {
+    // Get current user
+    const meResponse = await jiraFetch(`https://${domain}/rest/api/3/myself`);
+    if (!meResponse.ok) {
+      showStatus("Failed to get user info", "error");
+      return;
+    }
+    const me = await meResponse.json();
+    const accountId = me.accountId;
+
+    // Strategy: search backwards from yesterday, skipping weekends.
+    // Track the OLDEST under-logged day (<target). Stop when we hit a
+    // fully-logged day (>=target) — that's the boundary.
+    // e.g. dates: 6(8h), 9(0h), 10(3h) → oldest under-logged = 9
+    const today = new Date();
+    let checkDate = new Date(today);
+    checkDate.setDate(checkDate.getDate() - 1);
+    let oldestUnloggedDate = null;
+
+    for (let i = 0; i < 30; i++) {
+      // Skip weekends
+      while (isWeekend(checkDate)) {
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+
+      const dateStr = checkDate.toISOString().split("T")[0];
+      elements.lastUnloggedDay.textContent = `Checking ${dateStr}...`;
+      const totalMinutes = await getLoggedMinutesForDate(dateStr, accountId, domain);
+      const status = totalMinutes >= dailyHoursTarget * 60 ? "full" : `${formatMinutes(totalMinutes)}`;
+      elements.lastUnloggedDay.textContent = `${dateStr}: ${status}`;
+
+      if (totalMinutes < dailyHoursTarget * 60) {
+        // Under-logged day — track as candidate, keep searching older days
+        oldestUnloggedDate = dateStr;
+      } else {
+        // Fully-logged day — this is the boundary, stop
+        break;
+      }
+
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    if (oldestUnloggedDate) {
+      elements.workDate.value = oldestUnloggedDate;
+      updateDateLabel();
+      scheduleWorklogLoad(oldestUnloggedDate);
+    } else {
+      showStatus("All recent workdays are fully logged", "info");
+    }
+  } catch (err) {
+    showStatus(`Error: ${sanitizeString(err.message, 100)}`, "error");
+  } finally {
+    elements.lastUnloggedDay.disabled = false;
+    elements.lastUnloggedDay.textContent = "Last unlogged day";
+  }
 }

@@ -95,6 +95,21 @@ header h1 {
   text-decoration: underline;
 }
 
+.btn-link#refresh-btn {
+  font-size: 18px;
+  padding: 2px 6px;
+}
+
+.btn-link#refresh-btn:hover {
+  color: #0052cc;
+  text-decoration: none;
+}
+
+.btn-link#refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .section {
   background: #fff;
   border-radius: 8px;
@@ -398,31 +413,52 @@ header h1 {
 /* Worklog List */
 .worklog-list {
   margin-top: 10px;
-  max-height: 120px;
+  max-height: 160px;
   overflow-y: auto;
 }
 
 .worklog-entry {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 6px 8px;
+  padding: 5px 8px;
   background: #f8f9fa;
   border-radius: 4px;
-  margin-top: 6px;
+  margin-top: 4px;
   font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.worklog-entry:hover {
+  background: #e9ecef;
+}
+
+.worklog-entry.expanded {
+  background: #deebff;
+  border-color: #0052cc;
+  border-radius: 4px 4px 0 0;
+  margin-bottom: 0;
 }
 
 .worklog-entry .worklog-ticket {
   font-weight: 600;
   color: #0052cc;
   min-width: 70px;
+  flex-shrink: 0;
+}
+
+.worklog-entry .worklog-time {
+  color: #5e6c84;
+  font-size: 11px;
+  margin: 0 6px;
+  flex-shrink: 0;
 }
 
 .worklog-entry .worklog-comment {
   flex: 1;
   color: #5e6c84;
-  margin: 0 8px;
+  margin: 0 6px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -431,8 +467,58 @@ header h1 {
 .worklog-entry .worklog-duration {
   font-weight: 600;
   color: #172b4d;
-  min-width: 50px;
+  min-width: 40px;
   text-align: right;
+  flex-shrink: 0;
+}
+
+/* Worklog Actions Bar */
+.worklog-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #deebff;
+  border: 1px solid #0052cc;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  margin-bottom: 4px;
+}
+
+.worklog-action-btn {
+  padding: 3px 10px;
+  border: 1px solid #dfe1e6;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  background: #fff;
+  color: #172b4d;
+  transition: all 0.15s;
+}
+
+.worklog-action-btn:hover {
+  background: #f4f5f7;
+}
+
+.worklog-action-btn.action-edit {
+  color: #0052cc;
+  border-color: #0052cc;
+}
+
+.worklog-action-btn.action-edit:hover {
+  background: #0052cc;
+  color: #fff;
+}
+
+.worklog-action-btn.action-delete {
+  color: #de350b;
+  border-color: #de350b;
+}
+
+.worklog-action-btn.action-delete:hover {
+  background: #de350b;
+  color: #fff;
 }
 
 .worklog-load-status {
@@ -465,6 +551,110 @@ header h1 {
 
 .worklog-load-status.info:hover {
   background: #ebecf0;
+}
+
+/* Last unlogged day button */
+.btn-last-unlogged {
+  width: 100%;
+  padding: 6px 10px;
+  background: #f4f5f7;
+  border: 1px solid #dfe1e6;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #5e6c84;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-last-unlogged:hover {
+  background: #deebff;
+  border-color: #0052cc;
+  color: #0052cc;
+}
+
+.btn-last-unlogged:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Pinned Tickets */
+.pinned-tickets {
+  margin-bottom: 8px;
+}
+
+.pinned-tickets:empty {
+  margin-bottom: 0;
+}
+
+.pinned-ticket-item {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid #dfe1e6;
+  border-left: 3px solid #0052cc;
+  border-radius: 4px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  gap: 6px;
+}
+
+.pinned-ticket-item:hover {
+  background: #deebff;
+  border-color: #0052cc;
+  border-left-color: #0052cc;
+}
+
+.pinned-ticket-item .pin-indicator {
+  color: #0052cc;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.pinned-ticket-item .ticket-key {
+  font-weight: 600;
+  color: #0052cc;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.pinned-ticket-item .ticket-summary {
+  flex: 1;
+  color: #172b4d;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pinned-ticket-item .unpin-btn {
+  background: none;
+  border: none;
+  color: #a5adba;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.pinned-ticket-item .unpin-btn:hover {
+  color: #de350b;
+}
+
+/* Pin button in selected ticket */
+.btn-pin {
+  font-size: 16px;
+  color: #a5adba;
+  transition: color 0.2s;
+}
+
+.btn-pin:hover {
+  color: #0052cc;
+}
+
+.btn-pin.pinned {
+  color: #0052cc;
 }
 
 /* Part 3: Search */
@@ -568,6 +758,248 @@ header h1 {
 
 .btn-icon:hover {
   color: #de350b;
+}
+
+/* Preset Descriptions */
+.preset-descriptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.preset-descriptions:empty {
+  margin-top: 0;
+}
+
+.preset-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  background: #f4f5f7;
+  border: 1px solid #dfe1e6;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  gap: 4px;
+  max-width: 100%;
+  user-select: none;
+}
+
+.preset-chip:hover {
+  background: #deebff;
+  border-color: #4c9aff;
+  box-shadow: 0 1px 4px rgba(0, 82, 204, 0.15);
+}
+
+.preset-chip:active {
+  transform: scale(0.97);
+}
+
+.preset-chip .preset-text {
+  font-size: 12px;
+  color: #172b4d;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  line-height: 1.3;
+}
+
+.preset-chip .preset-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 2px;
+  opacity: 0;
+  max-width: 0;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.preset-chip:hover .preset-actions {
+  opacity: 1;
+  max-width: 50px;
+}
+
+.preset-chip .preset-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 3px;
+  line-height: 1;
+  flex-shrink: 0;
+  color: #5e6c84;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.preset-chip .preset-action-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.preset-chip .preset-action-btn.preset-edit-btn:hover {
+  color: #0052cc;
+}
+
+.preset-chip .preset-action-btn.preset-delete-btn:hover {
+  color: #de350b;
+}
+
+/* Preset chip in confirm-delete state */
+.preset-chip.confirm-delete {
+  background: #ffebe6;
+  border-color: #de350b;
+  animation: preset-shake 0.3s ease;
+}
+
+.preset-chip.confirm-delete .preset-text {
+  color: #de350b;
+  font-weight: 500;
+}
+
+.preset-chip.confirm-delete .preset-actions {
+  opacity: 1;
+  max-width: 80px;
+}
+
+.preset-chip .preset-confirm-btns {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.preset-chip .preset-confirm-btn {
+  background: none;
+  border: 1px solid;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 10px;
+  line-height: 1.2;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.preset-chip .preset-confirm-btn.confirm-yes {
+  color: #de350b;
+  border-color: #de350b;
+}
+
+.preset-chip .preset-confirm-btn.confirm-yes:hover {
+  background: #de350b;
+  color: #fff;
+}
+
+.preset-chip .preset-confirm-btn.confirm-no {
+  color: #5e6c84;
+  border-color: #dfe1e6;
+}
+
+.preset-chip .preset-confirm-btn.confirm-no:hover {
+  background: #5e6c84;
+  color: #fff;
+}
+
+/* Preset inline editing */
+.preset-chip.editing {
+  background: #fff;
+  border-color: #0052cc;
+  box-shadow: 0 0 0 2px rgba(0, 82, 204, 0.2);
+  padding: 3px 4px;
+}
+
+.preset-chip .preset-edit-input {
+  border: none;
+  outline: none;
+  font-size: 12px;
+  color: #172b4d;
+  background: transparent;
+  width: 160px;
+  padding: 2px 4px;
+}
+
+.preset-chip.editing .preset-actions {
+  opacity: 1;
+  max-width: 50px;
+}
+
+@keyframes preset-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+/* Description label row */
+.desc-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.btn-save-preset {
+  background: none;
+  border: 1px solid #dfe1e6;
+  font-size: 11px;
+  color: #5e6c84;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 12px;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.btn-save-preset:hover {
+  background: #deebff;
+  border-color: #4c9aff;
+  color: #0052cc;
+}
+
+.btn-save-preset:active {
+  transform: scale(0.96);
+}
+
+.btn-save-preset.saved {
+  background: #e3fcef;
+  border-color: #00875a;
+  color: #00875a;
+}
+
+/* Submit Row */
+.submit-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.submit-row .btn {
+  flex: 1;
+}
+
+.auto-advance-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #5e6c84;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.auto-advance-label input[type="checkbox"] {
+  margin: 0;
 }
 
 /* Buttons */
