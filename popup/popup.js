@@ -986,8 +986,8 @@ async function searchTickets() {
   const query = sanitizeString(elements.ticketSearch.value.trim(), MAX_SEARCH_LENGTH);
   if (!query) return;
 
-  // Basic query validation - prevent injection
-  if (/[<>{}]/.test(query)) {
+  // Whitelist validation - only allow safe characters in JQL queries
+  if (!/^[a-zA-Z0-9\s\-_.,()]+$/.test(query)) {
     showStatus("Invalid characters in search", "error");
     return;
   }
