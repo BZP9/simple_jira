@@ -41,6 +41,7 @@
             <button id="size-md" class="size-btn" title="Medium">M</button>
             <button id="size-lg" class="size-btn" title="Large">L</button>
           </div>
+          <button id="overview-btn" class="btn-link" title="Month overview">Cal</button>
           <button id="refresh-btn" class="btn-link" title="Refresh all data">&#8635;</button>
           <button id="logout-btn" class="btn-link">Logout</button>
         </div>
@@ -73,6 +74,15 @@
           <span class="summary-label">Daily target:</span>
           <input type="number" id="daily-hours" class="target-input" value="8" min="1" max="24">
           <span>hours</span>
+        </div>
+        <div class="summary-divider"></div>
+        <div class="summary-row">
+          <span class="summary-label">Month logged:</span>
+          <span id="month-logged" class="summary-value month-value">—</span>
+        </div>
+        <div class="summary-row highlight-month">
+          <span class="summary-label">Month left:</span>
+          <span id="month-left" class="summary-value month-value">—</span>
         </div>
         <div id="worklog-list" class="worklog-list"></div>
         <div id="worklog-load-status" class="worklog-load-status"></div>
@@ -145,6 +155,24 @@
 
       <!-- Status Messages -->
       <div id="status-message" class="status-message"></div>
+    </div>
+
+    <!-- Overview Page -->
+    <div id="overview-page" class="page" style="display: none;">
+      <header>
+        <button id="overview-back-btn" class="btn-link overview-back">&#8592; Daily</button>
+        <div class="overview-month-nav">
+          <button id="overview-prev-month" class="date-nav-btn">&#8249;</button>
+          <span id="overview-month-label" class="overview-month-title"></span>
+          <button id="overview-next-month" class="date-nav-btn">&#8250;</button>
+        </div>
+        <button id="overview-reload-btn" class="btn-link" title="Reload month data">&#8635;</button>
+      </header>
+      <section class="section overview-section">
+        <div id="overview-summary" class="overview-summary"></div>
+        <div id="overview-calendar" class="overview-calendar"></div>
+      </section>
+      <div id="overview-status" class="worklog-load-status"></div>
     </div>
   </div>
   <script src="popup.js"></script>

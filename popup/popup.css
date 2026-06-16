@@ -400,6 +400,27 @@ header h1 {
   color: #5e6c84;
 }
 
+.summary-divider {
+  height: 1px;
+  background: #ebecf0;
+  margin: 8px -12px 4px;
+}
+
+.summary-row.highlight-month {
+  background: #fffae6;
+  margin: 2px -12px 0;
+  padding: 8px 12px;
+}
+
+.summary-row.highlight-month .summary-value {
+  color: #ff8b00;
+  font-size: 15px;
+}
+
+.month-value {
+  font-size: 13px;
+}
+
 .target-input {
   width: 50px;
   padding: 4px 6px;
@@ -1129,4 +1150,146 @@ header h1 {
   text-align: center;
   color: #5e6c84;
   padding: 12px;
+}
+
+/* Overview / Month Calendar */
+.overview-back {
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.overview-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  justify-content: center;
+}
+
+.overview-month-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #172b4d;
+  min-width: 130px;
+  text-align: center;
+}
+
+.overview-section {
+  padding: 10px;
+}
+
+.overview-summary {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+
+.overview-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.overview-stat-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.overview-calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.overview-dow {
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #5e6c84;
+  text-transform: uppercase;
+  padding: 4px 0;
+}
+
+.overview-day {
+  border-radius: 6px;
+  padding: 5px 3px;
+  text-align: center;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 2px;
+  background: #f8f9fa;
+}
+
+.overview-day:hover:not(.overview-day-empty):not(.overview-day-future):not(.day-weekend) {
+  border-color: #0052cc;
+  background: #deebff !important;
+  transform: scale(1.04);
+}
+
+.overview-day-empty {
+  cursor: default;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+.overview-day-future {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.overview-day-num {
+  font-size: 11px;
+  font-weight: 600;
+  color: #172b4d;
+  line-height: 1.2;
+}
+
+.overview-day-hours {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.overview-day-today {
+  border-color: #0052cc !important;
+  box-shadow: 0 0 0 1px #0052cc;
+}
+
+.overview-day-today .overview-day-num {
+  color: #0052cc;
+}
+
+.day-met {
+  background: #e3fcef;
+}
+
+.day-partial {
+  background: #fffae6;
+}
+
+.day-missed {
+  background: #ffebe6;
+}
+
+.day-weekend {
+  background: #f4f5f7;
+  cursor: default;
+}
+
+.day-no-data {
+  background: #f8f9fa;
 }

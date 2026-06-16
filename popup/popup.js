@@ -13,6 +13,12 @@ let isSearching = false; // Prevent concurrent searches
 let inputMode = "endTime"; // "endTime" or "duration"
 let editingWorklog = null; // { ticketKey, id } when editing an existing worklog
 
+// Overview mode state
+let overviewYear = new Date().getFullYear();
+let overviewMonth = new Date().getMonth(); // 0-indexed
+let overviewDayStats = {}; // { 'YYYY-MM-DD': { minutes, loaded } }
+let isLoadingOverview = false;
+
 // Constants for validation
 const MAX_DOMAIN_LENGTH = 100;
 const MAX_EMAIL_LENGTH = 254;
@@ -41,6 +47,7 @@ function initElements() {
   // Pages
   elements.loginPage = document.getElementById("login-page");
   elements.mainPage = document.getElementById("main-page");
+  elements.overviewPage = document.getElementById("overview-page");
 
   // Login
   elements.jiraDomain = document.getElementById("jira-domain");
@@ -67,6 +74,8 @@ function initElements() {
   elements.dailyHours = document.getElementById("daily-hours");
   elements.loggedHours = document.getElementById("logged-hours");
   elements.remainingHours = document.getElementById("remaining-hours");
+  elements.monthLogged = document.getElementById("month-logged");
+  elements.monthLeft = document.getElementById("month-left");
   elements.worklogList = document.getElementById("worklog-list");
   elements.worklogLoadStatus = document.getElementById("worklog-load-status");
 
@@ -90,6 +99,17 @@ function initElements() {
 
   // Last unlogged day
   elements.lastUnloggedDay = document.getElementById("last-unlogged-day");
+
+  // Overview page
+  elements.overviewBtn = document.getElementById("overview-btn");
+  elements.overviewBackBtn = document.getElementById("overview-back-btn");
+  elements.overviewPrevMonth = document.getElementById("overview-prev-month");
+  elements.overviewNextMonth = document.getElementById("overview-next-month");
+  elements.overviewReloadBtn = document.getElementById("overview-reload-btn");
+  elements.overviewMonthLabel = document.getElementById("overview-month-label");
+  elements.overviewCalendar = document.getElementById("overview-calendar");
+  elements.overviewSummary = document.getElementById("overview-summary");
+  elements.overviewStatus = document.getElementById("overview-status");
 
   // Auto-advance & presets
   elements.autoAdvance = document.getElementById("auto-advance");
@@ -192,6 +212,16 @@ function setupEventListeners() {
 
   // Save description preset
   elements.saveDescPreset.addEventListener("click", saveDescriptionPreset);
+
+  // Overview mode
+  elements.overviewBtn.addEventListener("click", showOverviewPage);
+  elements.overviewBackBtn.addEventListener("click", showDailyPage);
+  elements.overviewPrevMonth.addEventListener("click", () => navigateOverviewMonth(-1));
+  elements.overviewNextMonth.addEventListener("click", () => navigateOverviewMonth(1));
+  elements.overviewReloadBtn.addEventListener("click", () => {
+    overviewDayStats = {};
+    loadMonthOverview(overviewYear, overviewMonth);
+  });
 
   // Load saved input mode preference
   loadInputModePreference();
@@ -616,6 +646,9 @@ function updateHoursDisplay() {
     elements.remainingHours.style.color = "#00875a"; // Green for overtime
   }
 
+  // Update monthly summary from cache
+  updateMonthSummary();
+
   // Render worklog list
   if (loggedWorklogs.length === 0) {
     elements.worklogList.innerHTML = "";
@@ -641,6 +674,46 @@ function updateHoursDisplay() {
         toggleWorklogActions(idx, entry);
       });
     });
+  }
+}
+
+async function updateMonthSummary() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Count total working days in month
+  let totalWorkingDays = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, month, d).getDay();
+    if (dow !== 0 && dow !== 6) totalWorkingDays++;
+  }
+
+  // Sum logged minutes from cache for this month
+  const pad = n => String(n).padStart(2, "0");
+  const startDate = `${year}-${pad(month + 1)}-01`;
+  const endDate = `${year}-${pad(month + 1)}-${pad(daysInMonth)}`;
+
+  const cache = await getWorklogCache();
+  let totalLoggedMinutes = 0;
+  for (const [date, data] of Object.entries(cache)) {
+    if (date >= startDate && date <= endDate) {
+      totalLoggedMinutes += data.totalMinutes || 0;
+    }
+  }
+
+  const totalExpectedMinutes = totalWorkingDays * dailyHoursTarget * 60;
+  const monthLeftMinutes = totalExpectedMinutes - totalLoggedMinutes;
+
+  elements.monthLogged.textContent = formatMinutes(totalLoggedMinutes);
+
+  if (monthLeftMinutes >= 0) {
+    elements.monthLeft.textContent = formatMinutes(monthLeftMinutes);
+    elements.monthLeft.style.color = "";
+  } else {
+    elements.monthLeft.textContent = `+${formatMinutes(Math.abs(monthLeftMinutes))}`;
+    elements.monthLeft.style.color = "#00875a";
   }
 }
 
@@ -2085,4 +2158,237 @@ async function jumpToLastUnloggedDay() {
     elements.lastUnloggedDay.disabled = false;
     elements.lastUnloggedDay.textContent = "Last unlogged day";
   }
+}
+
+// ── Overview Mode ─────────────────────────────────────────────────────────────
+
+function showOverviewPage() {
+  elements.mainPage.style.display = "none";
+  elements.overviewPage.style.display = "block";
+  renderMonthCalendar();
+  loadMonthOverview(overviewYear, overviewMonth);
+}
+
+function showDailyPage(dateStr) {
+  elements.overviewPage.style.display = "none";
+  elements.mainPage.style.display = "block";
+  if (dateStr && typeof dateStr === "string") {
+    elements.workDate.value = dateStr;
+    updateDateLabel();
+    scheduleWorklogLoad(dateStr);
+  }
+}
+
+function navigateOverviewMonth(delta) {
+  overviewMonth += delta;
+  if (overviewMonth > 11) { overviewMonth = 0; overviewYear++; }
+  if (overviewMonth < 0)  { overviewMonth = 11; overviewYear--; }
+  overviewDayStats = {};
+  renderMonthCalendar();
+  loadMonthOverview(overviewYear, overviewMonth);
+}
+
+function renderMonthCalendar() {
+  const today = new Date().toISOString().split("T")[0];
+  const monthNames = [
+    "January","February","March","April","May","June",
+    "July","August","September","October","November","December"
+  ];
+  elements.overviewMonthLabel.textContent = `${monthNames[overviewMonth]} ${overviewYear}`;
+
+  const numDays = new Date(overviewYear, overviewMonth + 1, 0).getDate();
+  const firstDow = new Date(overviewYear, overviewMonth, 1).getDay();
+  const startOffset = (firstDow + 6) % 7; // Mon=0 … Sun=6
+
+  let html = "";
+  const dowLabels = ["M","T","W","T","F","S","S"];
+  for (const d of dowLabels) {
+    html += `<div class="overview-dow">${d}</div>`;
+  }
+  for (let i = 0; i < startOffset; i++) {
+    html += `<div class="overview-day overview-day-empty"></div>`;
+  }
+
+  let metCount = 0, partialCount = 0, missedCount = 0;
+
+  for (let d = 1; d <= numDays; d++) {
+    const dateStr = `${overviewYear}-${String(overviewMonth + 1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    const dow = new Date(overviewYear, overviewMonth, d).getDay();
+    const isWeekend = dow === 0 || dow === 6;
+    const isFuture = dateStr > today;
+    const isToday = dateStr === today;
+    const stats = overviewDayStats[dateStr];
+
+    let cls = "overview-day";
+    let hoursHtml = "";
+
+    if (isToday) cls += " overview-day-today";
+    if (isFuture) {
+      cls += " overview-day-future";
+      if (isWeekend) cls += " day-weekend";
+    } else if (isWeekend) {
+      cls += " day-weekend";
+    } else if (stats && stats.loaded) {
+      if (stats.minutes >= dailyHoursTarget * 60) {
+        cls += " day-met";
+        metCount++;
+      } else if (stats.minutes > 0) {
+        cls += " day-partial";
+        partialCount++;
+      } else {
+        cls += " day-missed";
+        missedCount++;
+      }
+    } else {
+      cls += " day-no-data";
+    }
+
+    if (stats && stats.loaded) {
+      const h = Math.floor(stats.minutes / 60);
+      const m = stats.minutes % 60;
+      const label = m > 0 ? `${h}h${m}m` : `${h}h`;
+      const color = stats.minutes >= dailyHoursTarget * 60
+        ? "#00875a"
+        : stats.minutes > 0 ? "#ff8b00" : "#de350b";
+      hoursHtml = `<span class="overview-day-hours" style="color:${color}">${label}</span>`;
+    } else if (!isFuture && !isWeekend) {
+      hoursHtml = `<span class="overview-day-hours" style="color:#a5adba">?</span>`;
+    }
+
+    const dataAttr = !isFuture ? `data-date="${escapeHtml(dateStr)}"` : "";
+    html += `<div class="${cls}" ${dataAttr}><span class="overview-day-num">${d}</span>${hoursHtml}</div>`;
+  }
+
+  elements.overviewCalendar.innerHTML = html;
+
+  // Click handlers for non-future days
+  elements.overviewCalendar.querySelectorAll(".overview-day[data-date]").forEach(cell => {
+    cell.addEventListener("click", () => showDailyPage(cell.dataset.date));
+  });
+
+  // Summary bar
+  const totalLoaded = Object.values(overviewDayStats).filter(s => s.loaded).length;
+  if (totalLoaded > 0) {
+    elements.overviewSummary.innerHTML =
+      `<span class="overview-stat"><span class="overview-stat-dot" style="background:#00875a"></span>${metCount} met</span>` +
+      `<span class="overview-stat"><span class="overview-stat-dot" style="background:#ff8b00"></span>${partialCount} partial</span>` +
+      `<span class="overview-stat"><span class="overview-stat-dot" style="background:#de350b"></span>${missedCount} missed</span>`;
+  } else {
+    elements.overviewSummary.innerHTML = "";
+  }
+}
+
+async function loadMonthOverview(year, month) {
+  if (isLoadingOverview) return;
+  isLoadingOverview = true;
+  elements.overviewReloadBtn.disabled = true;
+
+  const pad = n => String(n).padStart(2, "0");
+  const startDate = `${year}-${pad(month + 1)}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const endDate = `${year}-${pad(month + 1)}-${pad(lastDay)}`;
+  const today = new Date().toISOString().split("T")[0];
+
+  // Load from cache first
+  const cache = await getWorklogCache();
+  for (const [date, cached] of Object.entries(cache)) {
+    if (date >= startDate && date <= endDate && cached.worklogs) {
+      overviewDayStats[date] = { minutes: cached.totalMinutes, loaded: true };
+    }
+  }
+  renderMonthCalendar();
+
+  // Fetch from API
+  showOverviewStatus("Loading from Jira...", "loading");
+  try {
+    const domain = await getJiraDomain();
+    if (!domain) { showOverviewStatus("Not logged in", "error"); return; }
+
+    const meResp = await jiraFetch(`https://${domain}/rest/api/3/myself`);
+    if (!meResp.ok) { showOverviewStatus("Connection failed", "error"); return; }
+    const me = await meResp.json();
+    const accountId = me.accountId;
+
+    // Single JQL to get all tickets with worklogs this month
+    const jql = `worklogDate >= "${startDate}" AND worklogDate <= "${endDate}" AND worklogAuthor = currentUser()`;
+    const searchResp = await jiraFetch(
+      `https://${domain}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=100&fields=key`
+    );
+    if (!searchResp.ok) { showOverviewStatus("Failed to fetch month data", "error"); return; }
+
+    const searchResult = await searchResp.json();
+    const ticketKeys = (searchResult.issues || []).map(i => i.key);
+
+    // Accumulate worklogs per day
+    const dayAccum = {}; // { date: { seconds, worklogs[] } }
+
+    for (const ticketKey of ticketKeys) {
+      try {
+        const resp = await jiraFetch(
+          `https://${domain}/rest/api/3/issue/${ticketKey}/worklog?maxResults=5000`
+        );
+        if (!resp.ok) continue;
+        const data = await resp.json();
+
+        for (const log of data.worklogs || []) {
+          if (log.author?.accountId !== accountId) continue;
+          const logDate = log.started?.split("T")[0];
+          if (!logDate || logDate < startDate || logDate > endDate) continue;
+
+          if (!dayAccum[logDate]) dayAccum[logDate] = { seconds: 0, worklogs: [] };
+          const minutes = Math.round((log.timeSpentSeconds || 0) / 60);
+          dayAccum[logDate].seconds += log.timeSpentSeconds || 0;
+          dayAccum[logDate].worklogs.push({
+            id: log.id,
+            ticketKey,
+            minutes,
+            comment: extractCommentText(log.comment),
+            started: log.started
+          });
+        }
+      } catch (e) {
+        // skip failed ticket
+      }
+    }
+
+    // Write results to overviewDayStats and cache
+    for (const [date, { seconds, worklogs }] of Object.entries(dayAccum)) {
+      const totalMinutes = Math.round(seconds / 60);
+      overviewDayStats[date] = { minutes: totalMinutes, loaded: true };
+      const sorted = worklogs.sort((a, b) => (a.started || "").localeCompare(b.started || ""));
+      await setCachedWorklogs(date, sorted, totalMinutes);
+    }
+
+    // Mark weekdays up to today with no worklogs as 0-minute loaded
+    const cursor = new Date(startDate);
+    const endLimit = new Date(Math.min(new Date(endDate), new Date(today)));
+    while (cursor <= endLimit) {
+      const dateStr = cursor.toISOString().split("T")[0];
+      const dow = cursor.getDay();
+      if (dow !== 0 && dow !== 6 && !overviewDayStats[dateStr]) {
+        overviewDayStats[dateStr] = { minutes: 0, loaded: true };
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    renderMonthCalendar();
+
+    const loggedDays = Object.keys(dayAccum).length;
+    showOverviewStatus(
+      loggedDays > 0
+        ? `${ticketKeys.length} ticket${ticketKeys.length !== 1 ? "s" : ""}, ${loggedDays} day${loggedDays !== 1 ? "s" : ""} logged`
+        : "No worklogs found this month",
+      "info"
+    );
+  } catch (err) {
+    showOverviewStatus(`Error: ${sanitizeString(err.message, 100)}`, "error");
+  } finally {
+    isLoadingOverview = false;
+    elements.overviewReloadBtn.disabled = false;
+  }
+}
+
+function showOverviewStatus(message, type) {
+  elements.overviewStatus.textContent = message;
+  elements.overviewStatus.className = `worklog-load-status ${type}`;
 }
