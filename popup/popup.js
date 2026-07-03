@@ -76,6 +76,8 @@ function initElements() {
   elements.remainingHours = document.getElementById("remaining-hours");
   elements.monthLogged = document.getElementById("month-logged");
   elements.monthLeft = document.getElementById("month-left");
+  elements.monthLoggedLabel = document.getElementById("month-logged-label");
+  elements.monthLeftLabel = document.getElementById("month-left-label");
   elements.worklogList = document.getElementById("worklog-list");
   elements.worklogLoadStatus = document.getElementById("worklog-load-status");
 
@@ -678,9 +680,9 @@ function updateHoursDisplay() {
 }
 
 async function updateMonthSummary() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
+  const selectedDate = elements.workDate.value || new Date().toISOString().split("T")[0];
+  const [year, monthNum] = selectedDate.split("-").map(Number);
+  const month = monthNum - 1;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   // Count total working days in month
@@ -705,6 +707,11 @@ async function updateMonthSummary() {
 
   const totalExpectedMinutes = totalWorkingDays * dailyHoursTarget * 60;
   const monthLeftMinutes = totalExpectedMinutes - totalLoggedMinutes;
+
+  const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const monthLabel = monthNames[month];
+  elements.monthLoggedLabel.textContent = `${monthLabel} logged:`;
+  elements.monthLeftLabel.textContent = `${monthLabel} left:`;
 
   elements.monthLogged.textContent = formatMinutes(totalLoggedMinutes);
 
