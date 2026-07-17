@@ -1023,6 +1023,60 @@ header h1 {
   margin: 0;
 }
 
+.wiggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+.wiggle-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #5e6c84;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wiggle-toggle-label input[type="checkbox"] {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
+.wiggle-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.wiggle-input-group label {
+  font-size: 11px;
+  color: #5e6c84;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.wiggle-input-group input {
+  width: 50px;
+  padding: 4px 6px;
+  border: 1px solid #dfe1e6;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.wiggle-input-group input:focus {
+  outline: none;
+  border-color: #0052cc;
+  box-shadow: 0 0 0 2px rgba(0, 82, 204, 0.15);
+}
+
 /* Buttons */
 .btn {
   padding: 10px 16px;

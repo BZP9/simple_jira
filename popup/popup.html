@@ -135,6 +135,17 @@
           </div>
         </div>
 
+        <div class="wiggle-row">
+          <label class="wiggle-toggle-label" title="Add random time adjustment to make logging more human">
+            <input type="checkbox" id="wiggle-enabled">
+            <span>Wiggle time</span>
+          </label>
+          <div class="wiggle-input-group" style="display: none;">
+            <label for="wiggle-value">Max variation (min):</label>
+            <input type="number" id="wiggle-value" min="1" max="30" value="10" title="Maximum random minutes to add/subtract">
+          </div>
+        </div>
+
         <div class="form-group">
           <div class="desc-label-row">
             <label for="worklog-desc">Description</label>

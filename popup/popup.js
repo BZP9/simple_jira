@@ -12,6 +12,8 @@ let isSubmitting = false; // Prevent concurrent submissions
 let isSearching = false; // Prevent concurrent searches
 let inputMode = "endTime"; // "endTime" or "duration"
 let editingWorklog = null; // { ticketKey, id } when editing an existing worklog
+let wiggleEnabled = false;
+let wiggleMaxMinutes = 10;
 
 // Overview mode state
 let overviewYear = new Date().getFullYear();
@@ -34,6 +36,8 @@ const LUNCH_START = 12 * 60; // 12:00 in minutes
 const LUNCH_END = 13 * 60;   // 13:00 in minutes
 const WORK_END = 18 * 60;    // 18:00 in minutes
 
+const ENABLE_WIGGLE = true;
+const MAX_WIGGLE_TIME = 10; // start and end time have some wiggle time to randomize the total time to prevent flat records
 // DOM Elements
 const elements = {};
 
@@ -126,6 +130,11 @@ function initElements() {
   elements.toggleInputMode = document.getElementById("toggle-input-mode");
   elements.durationLabel = document.getElementById("duration-label");
 
+  // Wiggle settings
+  elements.wiggleEnabled = document.getElementById("wiggle-enabled");
+  elements.wiggleValue = document.getElementById("wiggle-value");
+  elements.wiggleInputGroup = document.querySelector(".wiggle-input-group");
+
   // Set default date to today
   elements.workDate.value = new Date().toISOString().split("T")[0];
   updateDateLabel();
@@ -210,6 +219,19 @@ function setupEventListeners() {
   // Auto-advance preference
   elements.autoAdvance.addEventListener("change", async () => {
     await browser.storage.local.set({ autoAdvance: elements.autoAdvance.checked });
+  });
+
+  // Wiggle settings
+  elements.wiggleEnabled.addEventListener("change", () => {
+    wiggleEnabled = elements.wiggleEnabled.checked;
+    elements.wiggleInputGroup.style.display = wiggleEnabled ? "flex" : "none";
+    updateDuration();
+  });
+
+  elements.wiggleValue.addEventListener("change", () => {
+    wiggleMaxMinutes = Math.max(1, Math.min(30, parseInt(elements.wiggleValue.value) || 10));
+    elements.wiggleValue.value = wiggleMaxMinutes;
+    updateDuration();
   });
 
   // Save description preset
@@ -743,6 +765,18 @@ function calculateDurationMinutes() {
   const endMinutes = endH * 60 + endM;
 
   return endMinutes - startMinutes;
+}
+
+function applyWiggle(baseDurationMinutes) {
+  if (!wiggleEnabled || baseDurationMinutes <= 0) {
+    return baseDurationMinutes;
+  }
+
+  const wiggleStart = Math.floor(Math.random() * (wiggleMaxMinutes + 1));
+  const wiggleEnd = Math.floor(Math.random() * (wiggleMaxMinutes + 1));
+  const adjustedDuration = baseDurationMinutes - wiggleStart - wiggleEnd;
+
+  return Math.max(1, adjustedDuration);
 }
 
 function updateDuration() {
@@ -1375,6 +1409,9 @@ async function submitWorklog() {
     showStatus(`Worklog cannot exceed ${MAX_WORKLOG_HOURS} hours`, "error");
     return;
   }
+
+  // Apply wiggle effect
+  durationMinutes = applyWiggle(durationMinutes);
 
   const domain = await getJiraDomain();
 
