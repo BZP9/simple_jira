@@ -103,6 +103,12 @@ function initElements() {
   elements.pinnedTickets = document.getElementById("pinned-tickets");
   elements.pinTicket = document.getElementById("pin-ticket");
 
+  // Ticket dropdown
+  elements.ticketDropdownBtn = document.getElementById("ticket-dropdown-btn");
+  elements.ticketDropdownLabel = document.getElementById("ticket-dropdown-label");
+  elements.ticketDropdownMenu = document.getElementById("ticket-dropdown-menu");
+  elements.ticketDropdownList = document.getElementById("ticket-dropdown-list");
+
   // Last unlogged day
   elements.lastUnloggedDay = document.getElementById("last-unlogged-day");
 
@@ -178,6 +184,12 @@ function setupEventListeners() {
     scheduleWorklogLoad(elements.workDate.value);
   });
 
+  // Ticket dropdown
+  elements.ticketDropdownBtn.addEventListener("click", toggleTicketDropdown);
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".ticket-dropdown")) closeTicketDropdown();
+  });
+
   // Search
   elements.searchBtn.addEventListener("click", searchTickets);
   elements.ticketSearch.addEventListener("keypress", (e) => {
@@ -186,6 +198,13 @@ function setupEventListeners() {
 
   // Worklog
   elements.clearTicket.addEventListener("click", clearSelectedTicket);
+  // Cmd/Ctrl+Enter in the description logs the work (zero-mouse path)
+  elements.worklogDesc.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      submitWorklog();
+    }
+  });
   elements.startTime.addEventListener("change", () => {
     if (inputMode === "endTime") {
       updateDuration();
@@ -457,7 +476,7 @@ function showLoginPage() {
 function showMainPage() {
   elements.loginPage.style.display = "none";
   elements.mainPage.style.display = "block";
-  renderPinnedTickets();
+  renderTicketDropdown();
   renderDescriptionPresets();
 }
 
@@ -567,8 +586,8 @@ async function handleRefresh() {
   // Reload worklogs for the current date (force refresh)
   scheduleWorklogLoad(elements.workDate.value, true);
 
-  // Re-render pinned tickets (in case storage changed externally)
-  renderPinnedTickets();
+  // Re-render ticket dropdown (in case storage changed externally)
+  renderTicketDropdown();
 
   elements.refreshBtn.disabled = false;
 }
@@ -899,6 +918,8 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
         setSmartStartTime();
         syncDurationInputsFromEndTime();
         updateDurationBadgeDisplay();
+      } else {
+        autoSelectDefaultTicket();
       }
       showWorklogLoadStatus("From cache (tap to refresh)", "info");
       return;
@@ -985,6 +1006,8 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
       setSmartStartTime();
       syncDurationInputsFromEndTime();
       updateDurationBadgeDisplay();
+    } else {
+      autoSelectDefaultTicket();
     }
 
     if (worklogs.length === 0) {
@@ -1054,8 +1077,8 @@ async function fetchWorklogsForDate(ticketKeys, accountId, date, domain, request
 }
 
 // Save ticket to recent list when selected
-async function saveRecentTicket(ticketKey) {
-  const stored = await browser.storage.local.get(["recentTickets"]);
+async function saveRecentTicket(ticketKey, summary) {
+  const stored = await browser.storage.local.get(["recentTickets", "ticketSummaries"]);
   let recentTickets = stored.recentTickets || [];
 
   // Remove if already exists, then add to front
@@ -1065,7 +1088,11 @@ async function saveRecentTicket(ticketKey) {
   // Keep only last 50
   recentTickets = recentTickets.slice(0, 50);
 
-  await browser.storage.local.set({ recentTickets });
+  // Cache the summary so the dropdown can label recents (keys carry no title)
+  const ticketSummaries = stored.ticketSummaries || {};
+  if (summary) ticketSummaries[ticketKey] = summary;
+
+  await browser.storage.local.set({ recentTickets, ticketSummaries });
 }
 
 function extractCommentText(comment) {
@@ -1233,6 +1260,10 @@ function selectTicket(key, summary) {
   elements.searchResults.innerHTML = "";
   elements.ticketSearch.value = "";
 
+  // Reflect selection on the dropdown button and close the menu
+  setTicketDropdownLabel(key, summary);
+  closeTicketDropdown();
+
   // Update pin button state
   updatePinButtonState(key);
 
@@ -1241,7 +1272,90 @@ function selectTicket(key, summary) {
   // Sync both duration inputs and badge display
   syncDurationInputsFromEndTime();
   updateDurationBadgeDisplay();
-  saveRecentTicket(key);
+  saveRecentTicket(key, summary);
+}
+
+function setTicketDropdownLabel(key, summary) {
+  elements.ticketDropdownLabel.textContent = summary ? `${key} · ${summary}` : key;
+  elements.ticketDropdownLabel.classList.add("has-selection");
+}
+
+function toggleTicketDropdown() {
+  if (elements.ticketDropdownMenu.style.display === "none") {
+    openTicketDropdown();
+  } else {
+    closeTicketDropdown();
+  }
+}
+
+function openTicketDropdown() {
+  elements.ticketDropdownMenu.style.display = "block";
+  elements.ticketDropdownBtn.classList.add("open");
+  renderTicketDropdown();
+}
+
+function closeTicketDropdown() {
+  elements.ticketDropdownMenu.style.display = "none";
+  elements.ticketDropdownBtn.classList.remove("open");
+}
+
+// Merge pinned tickets (objects) with recent keys (labelled from the summary
+// cache), pinned first, deduped. This is the dropdown's data source.
+async function getMergedTickets() {
+  const pinned = await getPinnedTickets();
+  const stored = await browser.storage.local.get(["recentTickets", "ticketSummaries"]);
+  const recentKeys = stored.recentTickets || [];
+  const summaries = stored.ticketSummaries || {};
+  const pinnedKeys = new Set(pinned.map(t => t.key));
+
+  const list = pinned.map(t => ({
+    key: t.key,
+    summary: t.summary || summaries[t.key] || "",
+    pinned: true
+  }));
+  for (const key of recentKeys) {
+    if (pinnedKeys.has(key)) continue;
+    list.push({ key, summary: summaries[key] || "", pinned: false });
+  }
+  return list;
+}
+
+async function renderTicketDropdown() {
+  const tickets = await getMergedTickets();
+
+  if (tickets.length === 0) {
+    elements.ticketDropdownList.innerHTML =
+      '<div class="ticket-dropdown-empty">No recent tickets yet — search below</div>';
+    return;
+  }
+
+  elements.ticketDropdownList.innerHTML = tickets.map(t => {
+    const keyAttr = t.key.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    const summaryAttr = (t.summary || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+    const isSel = selectedTicket && selectedTicket.key === t.key ? " selected" : "";
+    return `
+      <div class="ticket-option${isSel}" data-key="${keyAttr}" data-summary="${summaryAttr}">
+        <span class="ticket-option-star">${t.pinned ? "&#9733;" : ""}</span>
+        <span class="ticket-key">${escapeHtml(t.key)}</span>
+        <span class="ticket-summary">${escapeHtml(t.summary || "")}</span>
+      </div>`;
+  }).join("");
+
+  elements.ticketDropdownList.querySelectorAll(".ticket-option").forEach(opt => {
+    opt.addEventListener("click", () => {
+      selectTicket(opt.dataset.key, opt.dataset.summary);
+    });
+  });
+}
+
+// Pre-select the top ticket on open so the common case is "type desc → log".
+async function autoSelectDefaultTicket() {
+  if (selectedTicket) return;
+  const tickets = await getMergedTickets();
+  if (tickets.length === 0) return;
+  const top = tickets[0];
+  selectTicket(top.key, top.summary);
+  elements.worklogDesc.focus();
 }
 
 // Calculate smart start time based on existing worklogs
@@ -1343,6 +1457,9 @@ function clearSelectedTicket() {
   // Reset pin button
   elements.pinTicket.innerHTML = "&#9744;";
   elements.pinTicket.classList.remove("pinned");
+  // Reset dropdown label
+  elements.ticketDropdownLabel.textContent = "Select a ticket…";
+  elements.ticketDropdownLabel.classList.remove("has-selection");
 }
 
 async function submitWorklog() {
@@ -1675,62 +1792,19 @@ async function togglePinTicket() {
 
   await savePinnedTickets(pinned);
   updatePinButtonState(selectedTicket.key);
-  renderPinnedTickets();
+  renderTicketDropdown();
 }
 
 async function unpinTicket(key) {
   const pinned = await getPinnedTickets();
   const filtered = pinned.filter(t => t.key !== key);
   await savePinnedTickets(filtered);
-  renderPinnedTickets();
+  renderTicketDropdown();
 
   // Update pin button if this ticket is currently selected
   if (selectedTicket && selectedTicket.key === key) {
     updatePinButtonState(key);
   }
-}
-
-async function renderPinnedTickets() {
-  const pinned = await getPinnedTickets();
-
-  if (pinned.length === 0) {
-    elements.pinnedTickets.innerHTML = "";
-    return;
-  }
-
-  elements.pinnedTickets.innerHTML = pinned
-    .map(t => {
-      const keyHtml = escapeHtml(t.key);
-      const summaryHtml = escapeHtml(t.summary);
-      const keyAttr = t.key.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-      const summaryAttr = (t.summary || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-      return `
-        <div class="pinned-ticket-item" data-key="${keyAttr}" data-summary="${summaryAttr}">
-          <span class="pin-indicator">&#9654;</span>
-          <span class="ticket-key">${keyHtml}</span>
-          <span class="ticket-summary">${summaryHtml}</span>
-          <button class="unpin-btn" data-key="${keyAttr}" title="Unpin">×</button>
-        </div>
-      `;
-    })
-    .join("");
-
-  // Click to select ticket
-  elements.pinnedTickets.querySelectorAll(".pinned-ticket-item").forEach(item => {
-    item.addEventListener("click", (e) => {
-      // Don't select if clicking unpin button
-      if (e.target.classList.contains("unpin-btn")) return;
-      selectTicket(item.dataset.key, item.dataset.summary);
-    });
-  });
-
-  // Unpin buttons
-  elements.pinnedTickets.querySelectorAll(".unpin-btn").forEach(btn => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      unpinTicket(btn.dataset.key);
-    });
-  });
 }
 
 // ===== Worklog Actions (Edit/Delete) =====

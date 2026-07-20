@@ -98,14 +98,24 @@
           <div class="target-bar"><div id="target-bar-fill" class="target-bar-fill"></div></div>
         </div>
 
-        <!-- Ticket picker -->
+        <!-- Ticket picker (dropdown-first) -->
         <div class="ticket-picker">
-          <div id="pinned-tickets" class="pinned-tickets"></div>
-          <div class="search-box">
-            <input type="text" id="ticket-search" placeholder="Search by ticket number or name...">
-            <button id="search-btn" class="btn btn-secondary">Search</button>
+          <label class="ticket-picker-label">Ticket</label>
+          <div class="ticket-dropdown">
+            <button type="button" id="ticket-dropdown-btn" class="ticket-dropdown-btn">
+              <span id="ticket-dropdown-label" class="ticket-dropdown-label-text">Select a ticket…</span>
+              <span class="ticket-dropdown-caret">▾</span>
+            </button>
+            <div id="ticket-dropdown-menu" class="ticket-dropdown-menu" style="display: none;">
+              <div id="ticket-dropdown-list" class="ticket-dropdown-list"></div>
+              <div class="ticket-dropdown-search">
+                <input type="text" id="ticket-search" placeholder="Search all tickets…" autocomplete="off">
+                <button id="search-btn" class="btn btn-secondary">Go</button>
+              </div>
+              <div id="search-results" class="search-results"></div>
+            </div>
           </div>
-          <div id="search-results" class="search-results"></div>
+          <div id="pinned-tickets" class="pinned-tickets" style="display: none;"></div>
         </div>
 
         <!-- Worklog Entry (extends when ticket selected) -->

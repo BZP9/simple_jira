@@ -1728,9 +1728,174 @@ header h1 {
 
 /* Scrollbars */
 .worklog-list::-webkit-scrollbar,
-.search-results::-webkit-scrollbar { width: 8px; }
+.search-results::-webkit-scrollbar,
+.ticket-dropdown-list::-webkit-scrollbar { width: 8px; }
 .worklog-list::-webkit-scrollbar-thumb,
-.search-results::-webkit-scrollbar-thumb {
+.search-results::-webkit-scrollbar-thumb,
+.ticket-dropdown-list::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
   border-radius: 4px;
+}
+
+/* Ticket dropdown (dropdown-first picker) */
+.ticket-picker-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 6px;
+}
+
+.ticket-dropdown {
+  position: relative;
+}
+
+.ticket-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--field);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ticket-dropdown-btn:hover {
+  border-color: rgba(139, 147, 255, 0.4);
+}
+
+.ticket-dropdown-btn.open {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(139, 147, 255, 0.18);
+}
+
+.ticket-dropdown-label-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ticket-dropdown-label-text.has-selection {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.ticket-dropdown-caret {
+  flex-shrink: 0;
+  color: var(--text-faint);
+  font-size: 11px;
+  transition: transform 0.15s;
+}
+
+.ticket-dropdown-btn.open .ticket-dropdown-caret {
+  transform: rotate(180deg);
+}
+
+.ticket-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  padding: 8px;
+  background: rgba(20, 22, 34, 0.92);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+}
+
+.ticket-dropdown-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.ticket-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.ticket-option:hover {
+  background: rgba(139, 147, 255, 0.14);
+}
+
+.ticket-option.selected {
+  background: rgba(139, 147, 255, 0.2);
+}
+
+.ticket-option-star {
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.ticket-option .ticket-key {
+  font-weight: 600;
+  color: var(--accent);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.ticket-option .ticket-summary {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ticket-dropdown-empty {
+  padding: 12px 10px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.ticket-dropdown-search {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--glass-border-soft);
+}
+
+.ticket-dropdown-search input {
+  flex: 1;
+  padding: 8px 10px;
+  background: var(--field);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.ticket-dropdown-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(139, 147, 255, 0.18);
+}
+
+.ticket-dropdown-menu .search-results {
+  max-height: 160px;
+}
+
+.ticket-dropdown-menu .search-results:empty {
+  margin-top: 0;
 }
