@@ -1333,11 +1333,14 @@ async function renderTicketDropdown() {
     const keyAttr = t.key.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
     const summaryAttr = (t.summary || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
     const isSel = selectedTicket && selectedTicket.key === t.key ? " selected" : "";
+    const summaryHtml = t.summary
+      ? escapeHtml(t.summary)
+      : '<span class="ticket-option-nosummary">No description</span>';
     return `
       <div class="ticket-option${isSel}" data-key="${keyAttr}" data-summary="${summaryAttr}">
-        <span class="ticket-option-star">${t.pinned ? "&#9733;" : ""}</span>
-        <span class="ticket-key">${escapeHtml(t.key)}</span>
-        <span class="ticket-summary">${escapeHtml(t.summary || "")}</span>
+        <span class="ticket-option-key">${escapeHtml(t.key)}</span>
+        <span class="ticket-option-summary">${summaryHtml}</span>
+        ${t.pinned ? '<span class="ticket-option-pin" title="Pinned">&#9733;</span>' : ""}
       </div>`;
   }).join("");
 
