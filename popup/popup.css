@@ -1412,3 +1412,325 @@ header h1 {
 .day-no-data {
   background: #f8f9fa;
 }
+
+/* =====================================================================
+   Dark Aurora + Liquid Glass theme
+   Layered over the base styles above. Quiet, near-black, translucent.
+   ===================================================================== */
+
+:root {
+  --bg: #06070c;
+  --text: rgba(255, 255, 255, 0.92);
+  --text-muted: rgba(255, 255, 255, 0.55);
+  --text-faint: rgba(255, 255, 255, 0.38);
+  --glass: rgba(255, 255, 255, 0.05);
+  --glass-strong: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-soft: rgba(255, 255, 255, 0.07);
+  --field: rgba(255, 255, 255, 0.04);
+  --accent: #8b93ff;
+  --accent-2: #4fd1c5;
+  --accent-grad: linear-gradient(120deg, #7c83ff 0%, #9d7bff 45%, #4fd1c5 100%);
+  --radius: 16px;
+  --radius-sm: 10px;
+}
+
+body {
+  color-scheme: dark;
+  background: var(--bg);
+  color: var(--text);
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Aurora field — soft drifting color pools behind the glass */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -30% -30% -30% -30%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 34% at 18% 12%, rgba(124, 131, 255, 0.38), transparent 70%),
+    radial-gradient(40% 36% at 88% 22%, rgba(79, 209, 197, 0.28), transparent 72%),
+    radial-gradient(46% 42% at 70% 92%, rgba(157, 123, 255, 0.30), transparent 72%),
+    radial-gradient(40% 40% at 8% 88%, rgba(94, 130, 255, 0.22), transparent 72%);
+  filter: blur(28px) saturate(140%);
+  animation: aurora-drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes aurora-drift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(2%, -2%, 0) scale(1.08); }
+  100% { transform: translate3d(-2%, 2%, 0) scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
+}
+
+.container {
+  position: relative;
+  z-index: 1;
+}
+
+/* Glass surfaces */
+.section,
+.settings-sheet {
+  background: var(--glass);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: var(--radius);
+  box-shadow:
+    0 8px 30px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  backdrop-filter: blur(22px) saturate(160%);
+}
+
+.settings-sheet {
+  background: var(--glass-strong);
+}
+
+/* Headings & text */
+header h1 {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.section h2,
+.settings-sheet-header h2 {
+  color: var(--text);
+  border-color: var(--glass-border-soft);
+}
+
+.today-card h2,
+.month-card h2 {
+  color: var(--text-faint);
+}
+
+.settings-sheet-header { border-color: var(--glass-border-soft); }
+.settings-group { border: none; }
+.settings-group > label,
+.settings-toggle-label { color: var(--text-muted); }
+
+.summary-label { color: var(--text-muted); }
+.summary-value { color: var(--text); }
+.date-label { color: var(--accent); }
+
+/* Links / icon buttons */
+.btn-link { color: var(--text-muted); }
+.btn-link:hover { color: var(--text); text-decoration: none; }
+.btn-link#refresh-btn:hover,
+.btn-settings:hover { color: var(--accent); }
+.btn-icon { color: var(--text-muted); }
+.btn-icon:hover { color: #ff8f7a; }
+
+/* Fields */
+.form-group input,
+.form-group textarea,
+.time-input-main,
+.duration-input,
+.target-input,
+.date-input-main,
+.search-box input,
+.wiggle-input-group input,
+.ticket-search {
+  background: var(--field);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder,
+.search-box input::placeholder {
+  color: var(--text-faint);
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.time-input-main:focus,
+.duration-input:focus,
+.target-input:focus,
+.date-input-main:focus,
+.search-box input:focus,
+.wiggle-input-group input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(139, 147, 255, 0.18);
+}
+
+.date-input-main {
+  background: var(--field);
+  border: 1px solid rgba(139, 147, 255, 0.4);
+  color: var(--text);
+}
+
+/* Buttons */
+.btn-primary {
+  background: var(--accent-grad);
+  color: #06070c;
+  font-weight: 700;
+  box-shadow: 0 6px 20px rgba(124, 131, 255, 0.35);
+}
+
+.btn-primary:hover { filter: brightness(1.08); background: var(--accent-grad); }
+.btn-primary:disabled { background: rgba(255, 255, 255, 0.12); color: var(--text-faint); box-shadow: none; }
+
+.btn-secondary {
+  background: var(--glass-strong);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+}
+.btn-secondary:hover { background: rgba(255, 255, 255, 0.14); }
+
+.date-nav-btn,
+.btn-last-unlogged {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+}
+.date-nav-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06070c;
+}
+.btn-last-unlogged:hover {
+  background: rgba(139, 147, 255, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn-save-preset {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+}
+.btn-save-preset:hover {
+  background: rgba(139, 147, 255, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Target progress */
+.target-bar { background: rgba(255, 255, 255, 0.08); }
+.target-bar-fill { background: var(--accent-grad); }
+.target-bar-fill.met { background: linear-gradient(120deg, #4fd1c5, #45e0a8); }
+.target-inline .remaining-value { color: var(--accent); }
+
+/* Worklog entry section — glass, not green */
+.worklog-entry-section {
+  background: rgba(139, 147, 255, 0.06);
+  border: 1px solid rgba(139, 147, 255, 0.22);
+}
+.selected-ticket { background: var(--glass-strong); }
+.selected-ticket #selected-ticket-key { color: var(--accent); }
+.selected-ticket #selected-ticket-summary { color: var(--text); }
+
+.time-picker-row { background: rgba(255, 255, 255, 0.03); }
+.time-picker-item label,
+.duration-display label { color: var(--text-faint); }
+.time-separator { color: var(--text-faint); }
+.duration-badge { background: var(--accent-grad); color: #06070c; }
+.duration-toggle:hover { background: var(--accent-grad); filter: brightness(1.08); }
+.duration-unit { color: var(--text-muted); }
+
+/* Tiles: worklog entries, pinned, results, presets */
+.worklog-entry,
+.pinned-ticket-item,
+.search-result-item,
+.preset-chip {
+  background: var(--glass);
+  border: 1px solid var(--glass-border-soft);
+  color: var(--text);
+}
+.worklog-entry:hover,
+.pinned-ticket-item:hover,
+.search-result-item:hover {
+  background: rgba(139, 147, 255, 0.12);
+  border-color: rgba(139, 147, 255, 0.4);
+}
+.worklog-entry.expanded {
+  background: rgba(139, 147, 255, 0.14);
+  border-color: var(--accent);
+}
+.worklog-entry .worklog-ticket,
+.pinned-ticket-item .ticket-key,
+.search-result-item .ticket-key { color: var(--accent); }
+.worklog-entry .worklog-time,
+.worklog-entry .worklog-comment,
+.pinned-ticket-item .ticket-summary { color: var(--text-muted); }
+.worklog-entry .worklog-duration,
+.search-result-item .ticket-summary { color: var(--text); }
+.pinned-ticket-item { border-left: 3px solid var(--accent); }
+
+.worklog-actions-bar {
+  background: rgba(139, 147, 255, 0.12);
+  border-color: var(--accent);
+}
+.worklog-action-btn {
+  background: var(--glass-strong);
+  border-color: var(--glass-border);
+  color: var(--text);
+}
+.worklog-action-btn:hover { background: rgba(255, 255, 255, 0.14); }
+
+.preset-chip .preset-text { color: var(--text); }
+.preset-chip:hover { background: rgba(139, 147, 255, 0.12); border-color: rgba(139, 147, 255, 0.4); }
+.btn-pin { color: var(--text-faint); }
+.btn-pin:hover, .btn-pin.pinned { color: var(--accent); }
+
+/* Month highlight */
+.summary-row.highlight-month {
+  background: rgba(255, 214, 102, 0.08);
+  border-radius: var(--radius-sm);
+  margin: 0;
+  padding: 8px 10px;
+}
+.summary-row.highlight-month .summary-value { color: #ffd166; }
+.month-value { color: var(--text); }
+
+/* Load status */
+.worklog-load-status.loading,
+.worklog-load-status.info { background: var(--glass); color: var(--text-muted); }
+.worklog-load-status.info:hover { background: var(--glass-strong); }
+.worklog-load-status.error { background: rgba(255, 99, 71, 0.12); color: #ff8f7a; }
+
+/* Status overlay */
+.status-message.loading { background: rgba(10, 12, 20, 0.82); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.status-message.success { background: rgba(20, 40, 34, 0.9); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); color: #57e2b0; }
+.status-message.info { background: rgba(20, 26, 50, 0.9); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+
+.error-message { color: #ff8f7a; }
+.no-results, .loading { color: var(--text-muted); }
+
+/* Overview calendar — dark tuned */
+.overview-month-title { color: var(--text); }
+.overview-dow { color: var(--text-faint); }
+.overview-day {
+  background: var(--glass);
+  border: 1px solid var(--glass-border-soft);
+}
+.overview-day-num { color: var(--text); }
+.overview-day:hover:not(.overview-day-empty):not(.overview-day-future):not(.day-weekend) {
+  border-color: var(--accent);
+  background: rgba(139, 147, 255, 0.16) !important;
+}
+.overview-day-today { border-color: var(--accent) !important; box-shadow: 0 0 0 1px var(--accent); }
+.overview-day-today .overview-day-num { color: var(--accent); }
+.day-met { background: rgba(79, 209, 197, 0.16); }
+.day-partial { background: rgba(255, 209, 102, 0.14); }
+.day-missed { background: rgba(255, 99, 71, 0.14); }
+.day-weekend { background: rgba(255, 255, 255, 0.02); }
+.day-no-data { background: var(--glass); }
+
+/* Login page */
+#login-page .section { background: var(--glass); }
+
+/* Scrollbars */
+.worklog-list::-webkit-scrollbar,
+.search-results::-webkit-scrollbar { width: 8px; }
+.worklog-list::-webkit-scrollbar-thumb,
+.search-results::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
