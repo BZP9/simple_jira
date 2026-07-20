@@ -680,10 +680,12 @@ function updateHoursDisplay() {
     elements.worklogList.innerHTML = loggedWorklogs
       .map((log, idx) => {
         const startTime = log.started ? log.started.substring(11, 16) : "";
+        const endTime = getWorklogEndTime(log.started, log.minutes);
+        const timeRange = startTime && endTime ? `${startTime}–${endTime}` : startTime;
         return `
         <div class="worklog-entry" data-index="${idx}">
           <span class="worklog-ticket">${escapeHtml(log.ticketKey || "")}</span>
-          <span class="worklog-time">${startTime}</span>
+          <span class="worklog-time">${timeRange}</span>
           <span class="worklog-comment">${log.comment ? escapeHtml(log.comment) : "-"}</span>
           <span class="worklog-duration">${formatMinutes(log.minutes || 0)}</span>
         </div>
@@ -750,6 +752,19 @@ function formatMinutes(minutes) {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return `${h}h ${m}m`;
+}
+
+// Compute end time (HH:MM) from a worklog's start timestamp + logged minutes.
+// Lets the history show the actual logged span so wiggle's effect is visible.
+function getWorklogEndTime(started, minutes) {
+  if (!started || !minutes) return "";
+  const startH = parseInt(started.substring(11, 13), 10);
+  const startM = parseInt(started.substring(14, 16), 10);
+  if (Number.isNaN(startH) || Number.isNaN(startM)) return "";
+  const endTotal = startH * 60 + startM + minutes;
+  const endH = Math.floor(endTotal / 60) % 24;
+  const endM = endTotal % 60;
+  return `${String(endH).padStart(2, "0")}:${String(endM).padStart(2, "0")}`;
 }
 
 function calculateDurationMinutes() {
