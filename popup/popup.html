@@ -36,19 +36,46 @@
       <header>
         <h1>Jira Worklog</h1>
         <div class="header-actions">
-          <div class="size-buttons">
-            <button id="size-sm" class="size-btn" title="Small">S</button>
-            <button id="size-md" class="size-btn" title="Medium">M</button>
-            <button id="size-lg" class="size-btn" title="Large">L</button>
-          </div>
           <button id="overview-btn" class="btn-link" title="Month overview">Cal</button>
           <button id="refresh-btn" class="btn-link" title="Refresh all data">&#8635;</button>
-          <button id="logout-btn" class="btn-link">Logout</button>
+          <button id="settings-btn" class="btn-link btn-settings" title="Settings">&#9881;</button>
         </div>
       </header>
 
-      <!-- Part 1: Date Picker -->
-      <section class="section date-picker-section">
+      <!-- Settings Sheet (hidden by default) -->
+      <div id="settings-sheet" class="settings-sheet" style="display: none;">
+        <div class="settings-sheet-header">
+          <h2>Settings</h2>
+          <button id="settings-close" class="btn-icon" title="Close settings">×</button>
+        </div>
+        <div class="settings-group">
+          <label for="daily-hours">Daily target (hours)</label>
+          <input type="number" id="daily-hours" class="target-input" value="8" min="1" max="24">
+        </div>
+        <div class="settings-group">
+          <label class="settings-toggle-label">
+            <input type="checkbox" id="auto-advance">
+            <span>Auto-advance to next workday when target met</span>
+          </label>
+        </div>
+        <div class="settings-group">
+          <label class="settings-toggle-label">
+            <input type="checkbox" id="wiggle-enabled">
+            <span>Wiggle time (randomize durations)</span>
+          </label>
+          <div class="wiggle-input-group" style="display: none;">
+            <label for="wiggle-value">Max variation (min)</label>
+            <input type="number" id="wiggle-value" min="1" max="30" value="10" title="Maximum random minutes to shave off">
+          </div>
+        </div>
+        <div class="settings-group">
+          <button id="logout-btn" class="btn btn-secondary">Logout</button>
+        </div>
+      </div>
+
+      <!-- Card 1: Log (primary) -->
+      <section class="section log-card">
+        <!-- Date -->
         <div class="date-picker-header">
           <button type="button" id="prev-day" class="date-nav-btn">‹</button>
           <div class="date-display">
@@ -58,24 +85,89 @@
           <button type="button" id="next-day" class="date-nav-btn">›</button>
         </div>
         <button type="button" id="last-unlogged-day" class="btn-last-unlogged" title="Jump to last workday without worklogs">Last unlogged day</button>
+
+        <!-- Target progress strip -->
+        <div class="target-strip">
+          <div class="target-inline">
+            <span class="summary-label">Logged</span>
+            <span id="logged-hours" class="summary-value">0h 0m</span>
+            <span class="target-inline-sep"></span>
+            <span class="summary-label">Left today</span>
+            <span id="remaining-hours" class="summary-value remaining-value">8h 0m</span>
+          </div>
+          <div class="target-bar"><div id="target-bar-fill" class="target-bar-fill"></div></div>
+        </div>
+
+        <!-- Ticket picker -->
+        <div class="ticket-picker">
+          <div id="pinned-tickets" class="pinned-tickets"></div>
+          <div class="search-box">
+            <input type="text" id="ticket-search" placeholder="Search by ticket number or name...">
+            <button id="search-btn" class="btn btn-secondary">Search</button>
+          </div>
+          <div id="search-results" class="search-results"></div>
+        </div>
+
+        <!-- Worklog Entry (extends when ticket selected) -->
+        <div id="worklog-section" class="worklog-entry-section" style="display: none;">
+          <div class="selected-ticket">
+            <span id="selected-ticket-key"></span>
+            <span id="selected-ticket-summary"></span>
+            <button id="pin-ticket" class="btn-icon btn-pin" title="Pin this ticket">&#9744;</button>
+            <button id="clear-ticket" class="btn-icon" title="Clear selection">×</button>
+          </div>
+
+          <div class="time-picker-row">
+            <div class="time-picker-item">
+              <label>Start</label>
+              <input type="time" id="start-time" class="time-input-main">
+            </div>
+            <div class="time-separator">→</div>
+            <div class="time-picker-item" id="end-time-container">
+              <label>End</label>
+              <input type="time" id="end-time" class="time-input-main">
+            </div>
+            <div class="time-picker-item" id="duration-input-container" style="display: none;">
+              <label>Duration</label>
+              <div class="duration-inputs">
+                <input type="number" id="duration-hours" class="duration-input" value="8" min="0" max="24" placeholder="h">
+                <span class="duration-unit">h</span>
+                <input type="number" id="duration-minutes" class="duration-input" value="0" min="0" max="59" placeholder="m">
+                <span class="duration-unit">m</span>
+              </div>
+            </div>
+            <div class="duration-display">
+              <label id="duration-label">Duration</label>
+              <button id="toggle-input-mode" class="duration-badge duration-toggle" title="Click to switch input mode">
+                <span id="duration-display">8h 0m</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <div class="desc-label-row">
+              <label for="worklog-desc">Description</label>
+              <button id="save-desc-preset" class="btn-save-preset" title="Save current description as a quick-fill preset">+ Save as preset</button>
+            </div>
+            <textarea id="worklog-desc" rows="2" placeholder="What did you work on?"></textarea>
+            <div id="preset-descriptions" class="preset-descriptions"></div>
+          </div>
+
+          <div class="submit-row">
+            <button id="submit-worklog" class="btn btn-primary">Log Work</button>
+          </div>
+        </div>
       </section>
 
-      <!-- Part 2: Remaining Time (from Jira) -->
-      <section class="section summary-section">
-        <div class="summary-row">
-          <span class="summary-label">Logged:</span>
-          <span id="logged-hours" class="summary-value">0h 0m</span>
-        </div>
-        <div class="summary-row highlight">
-          <span class="summary-label">Remaining:</span>
-          <span id="remaining-hours" class="summary-value">8h 0m</span>
-        </div>
-        <div class="summary-row target-row">
-          <span class="summary-label">Daily target:</span>
-          <input type="number" id="daily-hours" class="target-input" value="8" min="1" max="24">
-          <span>hours</span>
-        </div>
-        <div class="summary-divider"></div>
+      <!-- Card 2: Today's entries -->
+      <section class="section today-card">
+        <h2>Today</h2>
+        <div id="worklog-list" class="worklog-list"></div>
+        <div id="worklog-load-status" class="worklog-load-status"></div>
+      </section>
+
+      <!-- Card 3: Month -->
+      <section class="section month-card">
         <div class="summary-row">
           <span id="month-logged-label" class="summary-label">Month logged:</span>
           <span id="month-logged" class="summary-value month-value">—</span>
@@ -83,84 +175,6 @@
         <div class="summary-row highlight-month">
           <span id="month-left-label" class="summary-label">Month left:</span>
           <span id="month-left" class="summary-value month-value">—</span>
-        </div>
-        <div id="worklog-list" class="worklog-list"></div>
-        <div id="worklog-load-status" class="worklog-load-status"></div>
-      </section>
-
-      <!-- Part 3: Ticket Picker -->
-      <section class="section">
-        <h2>Select Ticket</h2>
-        <div id="pinned-tickets" class="pinned-tickets"></div>
-        <div class="search-box">
-          <input type="text" id="ticket-search" placeholder="Search by ticket number or name...">
-          <button id="search-btn" class="btn btn-secondary">Search</button>
-        </div>
-        <div id="search-results" class="search-results"></div>
-      </section>
-
-      <!-- Part 4: Worklog Entry (extends when ticket selected) -->
-      <section id="worklog-section" class="section worklog-entry-section" style="display: none;">
-        <div class="selected-ticket">
-          <span id="selected-ticket-key"></span>
-          <span id="selected-ticket-summary"></span>
-          <button id="pin-ticket" class="btn-icon btn-pin" title="Pin this ticket">&#9744;</button>
-          <button id="clear-ticket" class="btn-icon" title="Clear selection">×</button>
-        </div>
-
-        <div class="time-picker-row">
-          <div class="time-picker-item">
-            <label>Start</label>
-            <input type="time" id="start-time" class="time-input-main">
-          </div>
-          <div class="time-separator">→</div>
-          <div class="time-picker-item" id="end-time-container">
-            <label>End</label>
-            <input type="time" id="end-time" class="time-input-main">
-          </div>
-          <div class="time-picker-item" id="duration-input-container" style="display: none;">
-            <label>Duration</label>
-            <div class="duration-inputs">
-              <input type="number" id="duration-hours" class="duration-input" value="8" min="0" max="24" placeholder="h">
-              <span class="duration-unit">h</span>
-              <input type="number" id="duration-minutes" class="duration-input" value="0" min="0" max="59" placeholder="m">
-              <span class="duration-unit">m</span>
-            </div>
-          </div>
-          <div class="duration-display">
-            <label id="duration-label">Duration</label>
-            <button id="toggle-input-mode" class="duration-badge duration-toggle" title="Click to switch input mode">
-              <span id="duration-display">8h 0m</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="wiggle-row">
-          <label class="wiggle-toggle-label" title="Add random time adjustment to make logging more human">
-            <input type="checkbox" id="wiggle-enabled">
-            <span>Wiggle time</span>
-          </label>
-          <div class="wiggle-input-group" style="display: none;">
-            <label for="wiggle-value">Max variation (min):</label>
-            <input type="number" id="wiggle-value" min="1" max="30" value="10" title="Maximum random minutes to add/subtract">
-          </div>
-        </div>
-
-        <div class="form-group">
-          <div class="desc-label-row">
-            <label for="worklog-desc">Description</label>
-            <button id="save-desc-preset" class="btn-save-preset" title="Save current description as a quick-fill preset">+ Save as preset</button>
-          </div>
-          <textarea id="worklog-desc" rows="2" placeholder="What did you work on?"></textarea>
-          <div id="preset-descriptions" class="preset-descriptions"></div>
-        </div>
-
-        <div class="submit-row">
-          <button id="submit-worklog" class="btn btn-primary">Log Work</button>
-          <label class="auto-advance-label" title="Auto-advance to next workday when daily target is met">
-            <input type="checkbox" id="auto-advance">
-            <span>Auto next day</span>
-          </label>
         </div>
       </section>
 

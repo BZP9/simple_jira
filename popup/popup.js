@@ -43,7 +43,6 @@ const elements = {};
 
 document.addEventListener("DOMContentLoaded", async () => {
   initElements();
-  await loadPopupSize();
   await checkLoginStatus();
 });
 
@@ -63,9 +62,10 @@ function initElements() {
   // Main page - Header
   elements.refreshBtn = document.getElementById("refresh-btn");
   elements.logoutBtn = document.getElementById("logout-btn");
-  elements.sizeSm = document.getElementById("size-sm");
-  elements.sizeMd = document.getElementById("size-md");
-  elements.sizeLg = document.getElementById("size-lg");
+  elements.settingsBtn = document.getElementById("settings-btn");
+  elements.settingsSheet = document.getElementById("settings-sheet");
+  elements.settingsClose = document.getElementById("settings-close");
+  elements.targetBarFill = document.getElementById("target-bar-fill");
   elements.workDate = document.getElementById("work-date");
   elements.dateLabel = document.getElementById("date-label");
   elements.prevDay = document.getElementById("prev-day");
@@ -152,10 +152,14 @@ function setupEventListeners() {
   elements.logoutBtn.addEventListener("click", handleLogout);
   elements.refreshBtn.addEventListener("click", handleRefresh);
 
-  // Size buttons
-  elements.sizeSm.addEventListener("click", () => setPopupSize("sm"));
-  elements.sizeMd.addEventListener("click", () => setPopupSize("md"));
-  elements.sizeLg.addEventListener("click", () => setPopupSize("lg"));
+  // Settings sheet
+  elements.settingsBtn.addEventListener("click", () => {
+    const open = elements.settingsSheet.style.display === "none";
+    elements.settingsSheet.style.display = open ? "block" : "none";
+  });
+  elements.settingsClose.addEventListener("click", () => {
+    elements.settingsSheet.style.display = "none";
+  });
 
   // Daily hours
   elements.dailyHours.addEventListener("change", async () => {
@@ -457,40 +461,6 @@ function showMainPage() {
   renderDescriptionPresets();
 }
 
-async function setPopupSize(size) {
-  // Remove all size classes
-  document.body.classList.remove("size-sm", "size-md", "size-lg");
-
-  // Add new size class if not default
-  if (size && size !== "default") {
-    document.body.classList.add(`size-${size}`);
-  }
-
-  // Update button states
-  elements.sizeSm.classList.toggle("active", size === "sm");
-  elements.sizeMd.classList.toggle("active", size === "md");
-  elements.sizeLg.classList.toggle("active", size === "lg");
-
-  // Save preference
-  await browser.storage.local.set({ popupSize: size });
-}
-
-async function loadPopupSize() {
-  const data = await browser.storage.local.get(["popupSize"]);
-  const size = data.popupSize || "default";
-
-  if (size && size !== "default") {
-    document.body.classList.add(`size-${size}`);
-  }
-
-  // Update button states
-  if (elements.sizeSm) {
-    elements.sizeSm.classList.toggle("active", size === "sm");
-    elements.sizeMd.classList.toggle("active", size === "md");
-    elements.sizeLg.classList.toggle("active", size === "lg");
-  }
-}
-
 async function handleLogin() {
   const domain = normalizeDomain(elements.jiraDomain.value.trim());
   const email = sanitizeString(elements.jiraEmail.value.trim(), MAX_EMAIL_LENGTH);
@@ -668,6 +638,15 @@ function updateHoursDisplay() {
     // Show overtime as negative/excess
     elements.remainingHours.textContent = `+${formatMinutes(Math.abs(remaining))}`;
     elements.remainingHours.style.color = "#00875a"; // Green for overtime
+  }
+
+  // Update target progress bar
+  if (elements.targetBarFill) {
+    const pct = targetMinutes > 0
+      ? Math.max(0, Math.min(100, (loggedMinutesToday / targetMinutes) * 100))
+      : 0;
+    elements.targetBarFill.style.width = `${pct}%`;
+    elements.targetBarFill.classList.toggle("met", loggedMinutesToday >= targetMinutes);
   }
 
   // Update monthly summary from cache
