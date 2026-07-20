@@ -127,30 +127,39 @@
             <button id="clear-ticket" class="btn-icon" title="Clear selection">×</button>
           </div>
 
-          <div class="time-picker-row">
-            <div class="time-picker-item">
-              <label>Start</label>
-              <input type="time" id="start-time" class="time-input-main">
-            </div>
-            <div class="time-separator">→</div>
-            <div class="time-picker-item" id="end-time-container">
-              <label>End</label>
-              <input type="time" id="end-time" class="time-input-main">
-            </div>
-            <div class="time-picker-item" id="duration-input-container" style="display: none;">
-              <label>Duration</label>
-              <div class="duration-inputs">
-                <input type="number" id="duration-hours" class="duration-input" value="8" min="0" max="24" placeholder="h">
-                <span class="duration-unit">h</span>
-                <input type="number" id="duration-minutes" class="duration-input" value="0" min="0" max="59" placeholder="m">
-                <span class="duration-unit">m</span>
+          <!-- Collapsed time summary; tap to reveal the editor -->
+          <button type="button" id="time-chip" class="time-chip">
+            <span class="time-chip-clock">◷</span>
+            <span id="time-chip-text" class="time-chip-text">09:00 → 11:00 · 2h 0m</span>
+            <span class="time-chip-edit">Edit</span>
+          </button>
+
+          <div id="time-editor" class="time-editor" style="display: none;">
+            <div class="time-picker-row">
+              <div class="time-picker-item">
+                <label>Start</label>
+                <input type="time" id="start-time" class="time-input-main">
               </div>
-            </div>
-            <div class="duration-display">
-              <label id="duration-label">Duration</label>
-              <button id="toggle-input-mode" class="duration-badge duration-toggle" title="Click to switch input mode">
-                <span id="duration-display">8h 0m</span>
-              </button>
+              <div class="time-separator">→</div>
+              <div class="time-picker-item" id="end-time-container">
+                <label>End</label>
+                <input type="time" id="end-time" class="time-input-main">
+              </div>
+              <div class="time-picker-item" id="duration-input-container" style="display: none;">
+                <label>Duration</label>
+                <div class="duration-inputs">
+                  <input type="number" id="duration-hours" class="duration-input" value="8" min="0" max="24" placeholder="h">
+                  <span class="duration-unit">h</span>
+                  <input type="number" id="duration-minutes" class="duration-input" value="0" min="0" max="59" placeholder="m">
+                  <span class="duration-unit">m</span>
+                </div>
+              </div>
+              <div class="duration-display">
+                <label id="duration-label">Duration</label>
+                <button id="toggle-input-mode" class="duration-badge duration-toggle" title="Click to switch input mode">
+                  <span id="duration-display">8h 0m</span>
+                </button>
+              </div>
             </div>
           </div>
 

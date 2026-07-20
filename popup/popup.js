@@ -136,6 +136,11 @@ function initElements() {
   elements.toggleInputMode = document.getElementById("toggle-input-mode");
   elements.durationLabel = document.getElementById("duration-label");
 
+  // Collapsible time chip
+  elements.timeChip = document.getElementById("time-chip");
+  elements.timeChipText = document.getElementById("time-chip-text");
+  elements.timeEditor = document.getElementById("time-editor");
+
   // Wiggle settings
   elements.wiggleEnabled = document.getElementById("wiggle-enabled");
   elements.wiggleValue = document.getElementById("wiggle-value");
@@ -216,6 +221,13 @@ function setupEventListeners() {
   });
   elements.endTime.addEventListener("change", updateDuration);
   elements.submitWorklog.addEventListener("click", submitWorklog);
+
+  // Collapsible time editor
+  elements.timeChip.addEventListener("click", () => {
+    const open = elements.timeEditor.style.display === "none";
+    elements.timeEditor.style.display = open ? "block" : "none";
+    elements.timeChip.classList.toggle("open", open);
+  });
 
   // Duration input mode toggle
   elements.toggleInputMode.addEventListener("click", toggleInputMode);
@@ -382,6 +394,17 @@ function updateDurationBadgeDisplay() {
       elements.durationDisplay.textContent = "Invalid";
     }
   }
+  updateTimeChip();
+}
+
+// Keep the collapsed chip in sync with the current start/end/duration.
+function updateTimeChip() {
+  if (!elements.timeChipText) return;
+  const start = elements.startTime.value || "--:--";
+  const end = elements.endTime.value || "--:--";
+  const duration = calculateDurationMinutes();
+  const durText = duration > 0 ? formatMinutes(duration) : "—";
+  elements.timeChipText.textContent = `${start} → ${end} · ${durText}`;
 }
 
 function changeDate(days) {
