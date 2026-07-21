@@ -855,6 +855,26 @@ async function jiraFetch(url, options = {}) {
   };
 }
 
+// Issue search that survives Jira Cloud's removal of the classic
+// GET /rest/api/3/search (now returns 410). Tries the classic endpoint for
+// older Server/DC instances, then falls back to POST /rest/api/3/search/jql.
+// Returns a jiraFetch response-like object; both endpoints expose `.issues`.
+async function jiraSearchIssues(domain, jql, fields, maxResults) {
+  const fieldList = (fields || ["key"]).join(",");
+  let resp = await jiraFetch(
+    `https://${domain}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=${maxResults}&fields=${fieldList}`
+  );
+
+  if (resp.status === 410 || resp.status === 404) {
+    resp = await jiraFetch(`https://${domain}/rest/api/3/search/jql`, {
+      method: "POST",
+      body: JSON.stringify({ jql, maxResults, fields: fields || ["key"] })
+    });
+  }
+
+  return resp;
+}
+
 function loadTodayWorklogs() {
   const date = new Date().toISOString().split("T")[0];
   scheduleWorklogLoad(date);
@@ -974,9 +994,7 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
     // Try JQL search for worklogs on this date
     try {
       const jql = `worklogDate = "${date}" AND worklogAuthor = currentUser()`;
-      const searchResponse = await jiraFetch(
-        `https://${domain}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50&fields=key`
-      );
+      const searchResponse = await jiraSearchIssues(domain, jql, ["key"], 50);
       if (searchResponse.ok) {
         const searchResult = await searchResponse.json();
         ticketKeys = (searchResult.issues || []).map(i => i.key);
@@ -2174,9 +2192,7 @@ async function getLoggedMinutesForDate(dateStr, accountId, domain) {
     // Try JQL search for worklogs on this date
     try {
       const jql = `worklogDate = "${dateStr}" AND worklogAuthor = currentUser()`;
-      const searchResponse = await jiraFetch(
-        `https://${domain}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=50&fields=key`
-      );
+      const searchResponse = await jiraSearchIssues(domain, jql, ["key"], 50);
       if (searchResponse.ok) {
         const searchResult = await searchResponse.json();
         ticketKeys = (searchResult.issues || []).map(iss => iss.key);
@@ -2449,9 +2465,7 @@ async function loadMonthOverview(year, month) {
 
     // Single JQL to get all tickets with worklogs this month
     const jql = `worklogDate >= "${startDate}" AND worklogDate <= "${endDate}" AND worklogAuthor = currentUser()`;
-    const searchResp = await jiraFetch(
-      `https://${domain}/rest/api/3/search?jql=${encodeURIComponent(jql)}&maxResults=100&fields=key`
-    );
+    const searchResp = await jiraSearchIssues(domain, jql, ["key"], 100);
     if (!searchResp.ok) { showOverviewStatus("Failed to fetch month data", "error"); return; }
 
     const searchResult = await searchResp.json();

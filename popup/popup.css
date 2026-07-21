@@ -2006,3 +2006,75 @@ header h1 {
 .time-editor {
   margin-top: 10px;
 }
+
+/* =====================================================================
+   Polish pass — accents, focus, press feedback, entrance
+   ===================================================================== */
+
+/* Native checkboxes tint to the accent instead of default blue/grey */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
+/* Keyboard focus ring (mouse clicks stay clean via :focus-visible) */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+.ticket-option:focus-visible,
+.ticket-dropdown-btn:focus-visible,
+.time-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Press feedback on the main interactive surfaces */
+.btn-primary:active,
+.ticket-dropdown-btn:active,
+.time-chip:active,
+.date-nav-btn:active,
+.btn-last-unlogged:active,
+.duration-toggle:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+/* Header action buttons read as quiet pills, not bare text */
+.header-actions .btn-link {
+  border-radius: 8px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.header-actions .btn-link:hover {
+  background: var(--glass-strong);
+}
+
+/* Hide number spinners on the settings fields for a cleaner look */
+.target-input::-webkit-inner-spin-button,
+.target-input::-webkit-outer-spin-button,
+.wiggle-input-group input::-webkit-inner-spin-button,
+.wiggle-input-group input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.target-input,
+.wiggle-input-group input {
+  -moz-appearance: textfield;
+}
+
+/* Gentle entrance for the popup so it doesn't snap in */
+@media (prefers-reduced-motion: no-preference) {
+  .container > .page {
+    animation: page-in 0.28s ease both;
+  }
+  .worklog-entry-section {
+    animation: section-in 0.22s ease both;
+  }
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes section-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
