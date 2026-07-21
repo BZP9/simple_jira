@@ -1109,7 +1109,59 @@ async function setCachedWorklogs(date, worklogs, totalMinutes) {
 }
 
 async function clearWorklogCache() {
-  await browser.storage.local.remove([CACHE_KEY]);
+  await browser.storage.local.remove([CACHE_KEY, MONTH_CACHE_KEY]);
+}
+
+// ===== Month overview cache =====
+// The daily worklog cache above is a rolling window of the last 20 DAYS, so
+// it cannot hold a whole month (up to 31 days), and navigating to another
+// month evicts the previous one entirely. The month overview therefore keeps
+// its OWN per-month snapshot, keyed by "YYYY-MM", independent of that
+// eviction — so a guard-served reload (fetched <60s ago, no mutation) after
+// navigating away and back finds the full month intact instead of a cache
+// the daily window has since overwritten. Stores the computed per-day stats
+// map, keeps the most recent MONTH_CACHE_MAX months.
+const MONTH_CACHE_KEY = "monthStatsCache";
+const MONTH_CACHE_MAX = 12;
+
+async function getMonthStatsCache() {
+  const stored = await browser.storage.local.get([MONTH_CACHE_KEY]);
+  return stored[MONTH_CACHE_KEY] || {};
+}
+
+async function getCachedMonthStats(monthKey) {
+  const cache = await getMonthStatsCache();
+  const entry = cache[monthKey];
+  return entry && entry.days ? entry.days : null;
+}
+
+async function getCachedMonthTimestamp(monthKey) {
+  const cache = await getMonthStatsCache();
+  const entry = cache[monthKey];
+  return entry && entry.cachedAt ? entry.cachedAt : null;
+}
+
+// "just now" / "3 min ago" / "2 hr ago" / "3 days ago" from a timestamp.
+function formatRelativeTime(ts) {
+  if (!ts) return "";
+  const sec = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (sec < 45) return "just now";
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} hr ago`;
+  const days = Math.round(hr / 24);
+  return `${days} day${days !== 1 ? "s" : ""} ago`;
+}
+
+async function setCachedMonthStats(monthKey, days) {
+  const cache = await getMonthStatsCache();
+  cache[monthKey] = { days, cachedAt: Date.now() };
+  // Prune to the most recent MONTH_CACHE_MAX months (keys sort chronologically)
+  const keys = Object.keys(cache).sort().reverse();
+  const pruned = {};
+  for (const k of keys.slice(0, MONTH_CACHE_MAX)) pruned[k] = cache[k];
+  await browser.storage.local.set({ [MONTH_CACHE_KEY]: pruned });
 }
 
 async function loadWorklogsForDate(date, forceRefresh = false, requestId = null) {
@@ -2676,13 +2728,19 @@ async function loadMonthOverview(year, month, forceRefresh = false) {
   const today = new Date().toISOString().split("T")[0];
   const monthScope = `month:${year}-${pad(month + 1)}`;
 
-  // Load from cache first — go through the same validated reader the daily
-  // view uses (getCachedWorklogs derives the total from the worklogs array
-  // itself) instead of trusting the raw cache's stored totalMinutes
-  // directly. Reading the raw field here let some cached days silently fail
-  // to render (or render with a stale total) whenever it didn't match the
-  // array — exactly the class of bug fixed for the daily view previously;
-  // this consolidates both views onto the one already-fixed code path.
+  // Load from cache first. Primary source is the per-month snapshot (survives
+  // the daily cache's 20-day eviction and month-to-month navigation). Then
+  // overlay any individual days still present in the daily worklog cache —
+  // those may be fresher if a day was just viewed/edited in the daily view.
+  // getCachedWorklogs is the same validated reader the daily view uses
+  // (derives the total from the worklogs array, so a stale stored total
+  // can't make a day silently drop out).
+  const monthSnapshot = await getCachedMonthStats(monthScope);
+  if (monthSnapshot) {
+    for (const [dateStr, s] of Object.entries(monthSnapshot)) {
+      overviewDayStats[dateStr] = { minutes: s.minutes, count: s.count, loaded: true };
+    }
+  }
   const cacheCursor = new Date(startDate);
   const cacheEnd = new Date(endDate);
   while (cacheCursor <= cacheEnd) {
@@ -2704,7 +2762,9 @@ async function loadMonthOverview(year, month, forceRefresh = false) {
   // nothing has been mutated since. The reload button always sets
   // forceRefresh to bypass this.
   if (!forceRefresh && await isScopeFresh(monthScope)) {
-    showOverviewStatus("Cached (up to date, refreshes within 1 min)", "info");
+    const cachedAt = await getCachedMonthTimestamp(monthScope);
+    const when = cachedAt ? ` · updated ${formatRelativeTime(cachedAt)}` : "";
+    showOverviewStatus(`Cached${when} (tap ↻ to refresh)`, "info");
     isLoadingOverview = false;
     elements.overviewReloadBtn.disabled = false;
     return;
@@ -2788,6 +2848,18 @@ async function loadMonthOverview(year, month, forceRefresh = false) {
       }
       cursor.setDate(cursor.getDate() + 1);
     }
+
+    // Persist the whole month as one snapshot, keyed by month — independent
+    // of the daily cache's 20-day rolling eviction, so navigating to another
+    // month and back doesn't lose it. This is what the guard-served reload
+    // reads from.
+    const snapshot = {};
+    for (const [dateStr, s] of Object.entries(overviewDayStats)) {
+      if (dateStr >= startDate && dateStr <= endDate && s.loaded) {
+        snapshot[dateStr] = { minutes: s.minutes, count: s.count };
+      }
+    }
+    await setCachedMonthStats(monthScope, snapshot);
 
     await markScopeFetched(monthScope);
     renderMonthCalendar();
