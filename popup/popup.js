@@ -679,7 +679,7 @@ function updateHoursDisplay() {
   } else {
     // Show overtime as negative/excess
     elements.remainingHours.textContent = `+${formatMinutes(Math.abs(remaining))}`;
-    elements.remainingHours.style.color = "#00875a"; // Green for overtime
+    elements.remainingHours.style.color = "#57e2b0"; // Green for overtime
   }
 
   // Update target progress bar
@@ -765,7 +765,7 @@ async function updateMonthSummary() {
     elements.monthLeft.style.color = "";
   } else {
     elements.monthLeft.textContent = `+${formatMinutes(Math.abs(monthLeftMinutes))}`;
-    elements.monthLeft.style.color = "#00875a";
+    elements.monthLeft.style.color = "#57e2b0";
   }
 }
 
@@ -2041,7 +2041,7 @@ async function editDescriptionPreset(index) {
     if (newValue && newValue !== presets[index]) {
       // Check for duplicates
       if (presets.includes(newValue)) {
-        input.style.borderBottom = "2px solid #de350b";
+        input.style.borderBottom = "2px solid #ff8f7a";
         return;
       }
       presets[index] = newValue;
@@ -2142,8 +2142,8 @@ async function renderDescriptionPresets() {
       if (presets[idx]) {
         elements.worklogDesc.value = presets[idx];
         // Brief highlight to confirm selection
-        chip.style.background = "#e3fcef";
-        chip.style.borderColor = "#00875a";
+        chip.style.background = "rgba(87, 226, 176, 0.18)";
+        chip.style.borderColor = "#57e2b0";
         setTimeout(() => {
           chip.style.background = "";
           chip.style.borderColor = "";
@@ -2402,11 +2402,11 @@ function renderMonthCalendar() {
       const m = stats.minutes % 60;
       const label = m > 0 ? `${h}h${m}m` : `${h}h`;
       const color = stats.minutes >= dailyHoursTarget * 60
-        ? "#00875a"
-        : stats.minutes > 0 ? "#ff8b00" : "#de350b";
+        ? "#57e2b0"
+        : stats.minutes > 0 ? "#ffd166" : "#ff8f7a";
       hoursHtml = `<span class="overview-day-hours" style="color:${color}">${label}</span>`;
     } else if (!isFuture && !isWeekend) {
-      hoursHtml = `<span class="overview-day-hours" style="color:#a5adba">?</span>`;
+      hoursHtml = `<span class="overview-day-hours" style="color:rgba(255,255,255,0.4)">?</span>`;
     }
 
     const dataAttr = !isFuture ? `data-date="${escapeHtml(dateStr)}"` : "";
@@ -2424,9 +2424,9 @@ function renderMonthCalendar() {
   const totalLoaded = Object.values(overviewDayStats).filter(s => s.loaded).length;
   if (totalLoaded > 0) {
     elements.overviewSummary.innerHTML =
-      `<span class="overview-stat"><span class="overview-stat-dot" style="background:#00875a"></span>${metCount} met</span>` +
-      `<span class="overview-stat"><span class="overview-stat-dot" style="background:#ff8b00"></span>${partialCount} partial</span>` +
-      `<span class="overview-stat"><span class="overview-stat-dot" style="background:#de350b"></span>${missedCount} missed</span>`;
+      `<span class="overview-stat"><span class="overview-stat-dot" style="background:#57e2b0"></span>${metCount} met</span>` +
+      `<span class="overview-stat"><span class="overview-stat-dot" style="background:#ffd166"></span>${partialCount} partial</span>` +
+      `<span class="overview-stat"><span class="overview-stat-dot" style="background:#ff8f7a"></span>${missedCount} missed</span>`;
   } else {
     elements.overviewSummary.innerHTML = "";
   }

@@ -2061,6 +2061,19 @@ textarea:focus-visible,
   -moz-appearance: textfield;
 }
 
+/* Saved-preset confirmation pill on dark */
+.btn-save-preset.saved {
+  background: rgba(87, 226, 176, 0.16);
+  border-color: #57e2b0;
+  color: #57e2b0;
+}
+
+/* Overview stat pills get a glass chip so they read on the dark ground */
+.overview-stat {
+  background: var(--glass-strong);
+  color: var(--text-muted);
+}
+
 /* Gentle entrance for the popup so it doesn't snap in */
 @media (prefers-reduced-motion: no-preference) {
   .container > .page {
