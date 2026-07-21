@@ -420,16 +420,24 @@ function updateTimeChip() {
 }
 
 // Stir the aurora like touching water: every click anywhere in the popup
-// (attached once, capture phase, in setupEventListeners) sends a big, fully
-// randomized swing through it — magnitude and direction both random each
-// time, so it reads as a real sweep across corners (top-right to top-left to
-// bottom-left, etc.) rather than a small in-place wiggle, and no two stirs
-// trace the same arc. Pivots near wherever you actually clicked. Capture
-// phase so it still fires even through handlers elsewhere that call
-// stopPropagation (e.g. the unpin button, worklog action buttons).
+// (attached once, capture phase, in setupEventListeners) advances its
+// rotation by a big, fully randomized amount — magnitude and direction both
+// random each time — and HOLDS there (a smooth CSS transition on the
+// rotation, not a spring back to 0), so each click leaves the aurora at a
+// new resting orientation instead of visibly snapping back afterward. Only
+// the brief "catching the light" filter flash is a one-shot animation; the
+// rotation itself is persistent, accumulating across clicks. Pivots near
+// wherever you actually clicked. Capture phase so it still fires even
+// through handlers elsewhere that call stopPropagation (e.g. the unpin
+// button, worklog action buttons).
+let auroraRotation = 0;
 function stirAurora(e) {
   const wrap = document.getElementById("aurora-wrap");
   if (!wrap) return;
+
+  // Respect reduced motion by skipping the effect entirely, rather than
+  // instantly snapping a big rotation into place with no transition.
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   const hasPoint = e && typeof e.clientX === "number" && typeof e.clientY === "number";
   // Clamp the pivot inward a bit: a huge rotation around a pivot right at the
@@ -443,10 +451,14 @@ function stirAurora(e) {
   const sign = Math.random() < 0.5 ? 1 : -1;
   const magnitude = 60 + Math.random() * 80; // 60..140 degrees — a real sweep, not a wiggle
 
+  auroraRotation = (auroraRotation + sign * magnitude) % 360;
+
   wrap.style.setProperty("--stir-x", `${xPct.toFixed(1)}%`);
   wrap.style.setProperty("--stir-y", `${yPct.toFixed(1)}%`);
-  wrap.style.setProperty("--stir-angle", `${(sign * magnitude).toFixed(2)}deg`);
+  wrap.style.setProperty("--stir-angle", `${auroraRotation.toFixed(2)}deg`);
 
+  // Filter flash only — the rotation above holds via CSS transition, no
+  // restart needed for that part.
   wrap.classList.remove("aurora-stir");
   void wrap.offsetWidth; // force reflow so re-adding the class restarts the CSS animation
   wrap.classList.add("aurora-stir");

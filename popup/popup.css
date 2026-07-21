@@ -1492,6 +1492,12 @@ body {
   z-index: 0;
   pointer-events: none;
   transform-origin: var(--stir-x, 50%) var(--stir-y, 50%);
+  /* Rotation is persistent (accumulates across clicks, set by JS) and holds
+     at its new resting angle rather than springing back — a smooth ease to
+     wherever it lands, not a bounce. */
+  transform: rotate(var(--stir-angle, 0deg));
+  transition: transform 1.8s cubic-bezier(0.22, 1, 0.36, 1),
+              transform-origin 1.8s ease;
 }
 
 .aurora-field {
@@ -1541,31 +1547,24 @@ body {
   100% { transform: translate3d(2%, -2%, 0) scale(1.02); }
 }
 
-/* Stir cue: like disturbing water — a big, randomized sweep (60-140deg, see
-   stirAurora in popup.js) that overshoots, swings back a touch the other
-   way, then settles (a damped oscillation, not a flat snap), plus a brief
-   saturation/brightness bump as if catching the light. Big enough that the
-   gradient blobs visibly travel across corners (top-right to top-left to
-   bottom-left, etc.) rather than just wiggling in place. JS sets
-   --stir-angle (magnitude + direction both random, so no two stirs trace
-   the same arc) and --stir-x/--stir-y (the click position, used as the
-   pivot above) before restarting this via a class toggle + forced reflow.
-   Longer duration than the old small-wiggle version so the bigger sweep
-   still reads as smooth rather than frantic. */
+/* Stir cue: the rotation itself (above) is persistent and holds at its new
+   resting angle. This is just the brief "catching the light" flash on top —
+   filter only, never touches transform, so it can't fight the rotation's own
+   transition. One-shot, restarted via a class toggle + forced reflow. */
 .aurora-wrap.aurora-stir {
-  animation: aurora-stir 2.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: aurora-stir-flash 0.9s ease-out;
 }
 
-@keyframes aurora-stir {
-  0%   { transform: rotate(0deg) scale(1); filter: saturate(100%) brightness(100%); }
-  30%  { transform: rotate(var(--stir-angle, 90deg)) scale(1.05); filter: saturate(140%) brightness(114%); }
-  62%  { transform: rotate(calc(var(--stir-angle, 90deg) * -0.3)) scale(0.98); filter: saturate(108%) brightness(103%); }
-  100% { transform: rotate(0deg) scale(1); filter: saturate(100%) brightness(100%); }
+@keyframes aurora-stir-flash {
+  0%   { filter: saturate(100%) brightness(100%); }
+  30%  { filter: saturate(140%) brightness(114%); }
+  100% { filter: saturate(100%) brightness(100%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .aurora-field { animation: none; transition: opacity 0.3s ease; }
   .aurora-accent { animation: none; }
+  .aurora-wrap { transition: none; }
   .aurora-wrap.aurora-stir { animation: none; }
 }
 
