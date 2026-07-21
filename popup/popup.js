@@ -121,6 +121,7 @@ function initElements() {
   elements.overviewMonthLabel = document.getElementById("overview-month-label");
   elements.overviewCalendar = document.getElementById("overview-calendar");
   elements.overviewSummary = document.getElementById("overview-summary");
+  elements.overviewHoursSummary = document.getElementById("overview-hours-summary");
   elements.overviewStatus = document.getElementById("overview-status");
 
   // Auto-advance & presets
@@ -281,7 +282,7 @@ function setupEventListeners() {
   elements.overviewNextMonth.addEventListener("click", () => navigateOverviewMonth(1));
   elements.overviewReloadBtn.addEventListener("click", () => {
     overviewDayStats = {};
-    loadMonthOverview(overviewYear, overviewMonth);
+    loadMonthOverview(overviewYear, overviewMonth, true);
   });
 
   // Load saved input mode preference
@@ -910,6 +911,49 @@ function hideWorklogLoadStatus() {
   elements.worklogLoadStatus.className = "worklog-load-status";
 }
 
+// ===== Fetch guard =====
+// Throttles live Jira reads to at most once per FETCH_GUARD_MS per scope
+// (e.g. "day:2026-07-21", "month:2026-07"), persisted so it survives closing
+// and reopening the popup. Any worklog mutation made by this extension bumps
+// a monotonic mutationSeq, which invalidates every scope's freshness
+// immediately regardless of the timer — a single write can shift what a
+// month/day query returns, and we'd rather over-fetch once than show stale
+// numbers after our own edit. A counter (not a timestamp) decides "mutated
+// since last fetch" so same-millisecond mutation-then-fetch calls can't race;
+// the 60s window still uses wall-clock time, which only needs to be
+// approximately right. This does NOT know about changes made outside this
+// popup (Jira web UI, teammates on a shared ticket) — those are only caught
+// once the guard window naturally elapses.
+const FETCH_GUARD_KEY = "fetchGuard";
+const FETCH_GUARD_MS = 60 * 1000;
+
+async function getFetchGuardState() {
+  const stored = await browser.storage.local.get([FETCH_GUARD_KEY]);
+  return stored[FETCH_GUARD_KEY] || { lastFetchAt: {}, lastFetchSeq: {}, mutationSeq: 0 };
+}
+
+async function isScopeFresh(scopeKey) {
+  const state = await getFetchGuardState();
+  const fetchedAt = state.lastFetchAt[scopeKey];
+  if (!fetchedAt) return false;
+  if ((state.lastFetchSeq[scopeKey] ?? -1) !== state.mutationSeq) return false; // mutated since last fetch
+  return Date.now() - fetchedAt < FETCH_GUARD_MS;
+}
+
+async function markScopeFetched(scopeKey) {
+  const state = await getFetchGuardState();
+  state.lastFetchAt[scopeKey] = Date.now();
+  state.lastFetchSeq[scopeKey] = state.mutationSeq;
+  await browser.storage.local.set({ [FETCH_GUARD_KEY]: state });
+}
+
+// Call after any successful create/update/delete worklog request.
+async function markJiraMutated() {
+  const state = await getFetchGuardState();
+  state.mutationSeq = (state.mutationSeq || 0) + 1;
+  await browser.storage.local.set({ [FETCH_GUARD_KEY]: state });
+}
+
 // Cache management for worklog data
 const CACHE_KEY = "worklogCache";
 const CACHE_MAX_DAYS = 20;
@@ -964,12 +1008,16 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
   const domain = await getJiraDomain();
   if (!domain) return;
 
-  // Check cache first (unless force refresh)
-  // Always refresh for today's date to avoid stale data
+  // Check cache first (unless force refresh).
+  // Past dates: cache is trusted indefinitely (assumed immutable).
+  // Today: only trust cache within the 1-min fetch guard, since today's
+  // worklogs are the ones actively being added to.
   const today = new Date().toISOString().split("T")[0];
   const isToday = date === today;
+  const dayScope = `day:${date}`;
+  const useCacheForToday = isToday && await isScopeFresh(dayScope);
 
-  if (!forceRefresh && !isToday) {
+  if (!forceRefresh && (!isToday || useCacheForToday)) {
     const cached = await getCachedWorklogs(date);
     if (cached) {
       if (requestId !== currentRequestId) return;
@@ -984,7 +1032,10 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
       } else {
         autoSelectDefaultTicket();
       }
-      showWorklogLoadStatus("From cache (tap to refresh)", "info");
+      showWorklogLoadStatus(
+        isToday ? "Cached (refreshes within 1 min, tap to force)" : "From cache (tap to refresh)",
+        "info"
+      );
       return;
     }
   }
@@ -1054,6 +1105,7 @@ async function loadWorklogsForDate(date, forceRefresh = false, requestId = null)
 
     // Save to cache
     await setCachedWorklogs(date, worklogs, totalMinutes);
+    await markScopeFetched(dayScope);
 
     if (requestId !== currentRequestId) return;
 
@@ -1682,6 +1734,7 @@ async function submitWorklog() {
     const isEditing = !!editingWorklog;
     editingWorklog = null;
     elements.submitWorklog.textContent = "Log Work";
+    await markJiraMutated();
 
     // Calculate new remaining before deciding to advance
     const newLoggedMinutes = loggedMinutesToday + (isEditing ? 0 : durationMinutes);
@@ -1994,6 +2047,7 @@ async function deleteWorklog(index) {
       throw new Error(`HTTP ${response.status}`);
     }
 
+    await markJiraMutated();
     showStatus(`Deleted worklog from ${log.ticketKey}`, "success");
 
     // Refresh worklogs
@@ -2410,6 +2464,8 @@ function renderMonthCalendar() {
   }
 
   let metCount = 0, partialCount = 0, missedCount = 0;
+  let totalLoggedMinutes = 0;
+  let totalWorkingDays = 0;
 
   for (let d = 1; d <= numDays; d++) {
     const dateStr = `${overviewYear}-${String(overviewMonth + 1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
@@ -2418,6 +2474,9 @@ function renderMonthCalendar() {
     const isFuture = dateStr > today;
     const isToday = dateStr === today;
     const stats = overviewDayStats[dateStr];
+
+    if (!isWeekend) totalWorkingDays++;
+    if (stats && stats.loaded) totalLoggedMinutes += stats.minutes;
 
     let cls = "overview-day";
     let hoursHtml = "";
@@ -2466,6 +2525,16 @@ function renderMonthCalendar() {
     cell.addEventListener("click", () => showDailyPage(cell.dataset.date));
   });
 
+  // Total logged vs. target for the whole month (just for fun — not gated on
+  // any API call, purely derived from whatever's in overviewDayStats so far)
+  if (elements.overviewHoursSummary) {
+    const targetMinutes = totalWorkingDays * dailyHoursTarget * 60;
+    elements.overviewHoursSummary.innerHTML =
+      `<span class="overview-hours-logged">${formatMinutes(totalLoggedMinutes)}</span>` +
+      `<span class="overview-hours-sep">/</span>` +
+      `<span class="overview-hours-target">${formatMinutes(targetMinutes)} target</span>`;
+  }
+
   // Summary bar
   const totalLoaded = Object.values(overviewDayStats).filter(s => s.loaded).length;
   if (totalLoaded > 0) {
@@ -2478,7 +2547,7 @@ function renderMonthCalendar() {
   }
 }
 
-async function loadMonthOverview(year, month) {
+async function loadMonthOverview(year, month, forceRefresh = false) {
   if (isLoadingOverview) return;
   isLoadingOverview = true;
   elements.overviewReloadBtn.disabled = true;
@@ -2488,6 +2557,7 @@ async function loadMonthOverview(year, month) {
   const lastDay = new Date(year, month + 1, 0).getDate();
   const endDate = `${year}-${pad(month + 1)}-${pad(lastDay)}`;
   const today = new Date().toISOString().split("T")[0];
+  const monthScope = `month:${year}-${pad(month + 1)}`;
 
   // Load from cache first
   const cache = await getWorklogCache();
@@ -2497,6 +2567,17 @@ async function loadMonthOverview(year, month) {
     }
   }
   renderMonthCalendar();
+
+  // Skip the live fetch (myself + JQL search + one worklog request per
+  // ticket) if we already fetched this month within the guard window and
+  // nothing has been mutated since. The reload button always sets
+  // forceRefresh to bypass this.
+  if (!forceRefresh && await isScopeFresh(monthScope)) {
+    showOverviewStatus("Cached (up to date, refreshes within 1 min)", "info");
+    isLoadingOverview = false;
+    elements.overviewReloadBtn.disabled = false;
+    return;
+  }
 
   // Fetch from API
   showOverviewStatus("Loading from Jira...", "loading");
@@ -2569,6 +2650,7 @@ async function loadMonthOverview(year, month) {
       cursor.setDate(cursor.getDate() + 1);
     }
 
+    await markScopeFetched(monthScope);
     renderMonthCalendar();
 
     const loggedDays = Object.keys(dayAccum).length;
