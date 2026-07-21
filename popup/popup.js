@@ -1555,7 +1555,10 @@ async function submitWorklog() {
 
   // Apply wiggle: jitter the start later AND pull the end in, so both the
   // start time and the duration drift off round numbers (looks hand-entered).
-  // logged span = (end - wiggleEnd) - (start + wiggleStart)
+  //   logged span = (end - wiggleEnd) - (start + wiggleStart)
+  // Each entry loses 0..2*wiggle minutes, so the day undershoots the target by
+  // a bounded amount — worst case total = target - 2*wiggle*entries. This
+  // undershoot is intentional (accepted margin) and predictable by design.
   let startForLog = start;
   if (wiggleEnabled && durationMinutes > 0) {
     const wiggleStart = Math.floor(Math.random() * (wiggleMaxMinutes + 1));

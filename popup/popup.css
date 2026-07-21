@@ -2095,3 +2095,37 @@ textarea:focus-visible,
     to   { opacity: 1; transform: translateY(0); }
   }
 }
+
+/* Reveal animations when panels open (they toggle display, so the animation
+   replays on show). Transforms here don't persist (default fill) and none of
+   these contain the fixed submit overlay, so no containing-block leak. */
+@media (prefers-reduced-motion: no-preference) {
+  .ticket-dropdown-menu {
+    animation: pop-in 0.16s ease;
+    transform-origin: top center;
+  }
+  #settings-sheet {
+    animation: pop-in 0.2s ease;
+  }
+  .time-editor {
+    animation: pop-in 0.16s ease;
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(-6px) scale(0.99); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  /* Interactive tiles ease their hover instead of snapping */
+  .worklog-entry,
+  .ticket-option,
+  .preset-chip,
+  .pinned-ticket-item,
+  .search-result-item,
+  .overview-day {
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+  }
+  .worklog-entry:active,
+  .ticket-option:active {
+    transform: scale(0.99);
+  }
+}
