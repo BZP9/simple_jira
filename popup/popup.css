@@ -1810,57 +1810,30 @@ header h1 {
 .worklog-load-status.info:hover { background: var(--glass-strong); }
 .worklog-load-status.error { background: rgba(255, 99, 71, 0.12); color: #ff8f7a; }
 
-/* Status overlay — the loading and success states read as the aurora itself
-   surging up to cover the UI: the panel blurs whatever's behind it and lays a
-   living, drifting aurora wash on top (the ::before layer), with the message
-   text sitting above that. */
+/* Status overlay — during submit we blur the whole UI (body.submitting on
+   .container, below) and crank the real background aurora up, so the actual
+   aurora surges through and appears to cover the UI. The loading/success
+   panel itself is therefore mostly transparent — just the centered text over
+   that intensified aurora, with a faint dark veil for text legibility. */
 .status-message.loading,
 .status-message.success {
   position: fixed;
-  overflow: hidden;
-  background: rgba(6, 7, 12, 0.5);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+  background: rgba(6, 7, 12, 0.25);
 }
 
-.status-message.loading::before,
-.status-message.success::before {
-  content: "";
-  position: absolute;
-  inset: -40%;
+.status-message.success { color: #eafff6; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.5); }
+.status-message.loading { text-shadow: 0 1px 12px rgba(0, 0, 0, 0.5); }
+
+/* Blur + fade the whole UI while a submit overlay is up, revealing the
+   surging aurora behind it. The aurora layer (#aurora-wrap) is NOT inside
+   .container, so it stays crisp and only intensifies. */
+.container {
+  transition: filter 0.4s ease, opacity 0.4s ease;
+}
+body.submitting .container {
+  filter: blur(12px);
+  opacity: 0.45;
   pointer-events: none;
-  background:
-    radial-gradient(40% 40% at 25% 28%, rgba(124, 131, 255, 0.55), transparent 70%),
-    radial-gradient(38% 38% at 80% 30%, rgba(79, 209, 197, 0.45), transparent 72%),
-    radial-gradient(46% 46% at 60% 82%, rgba(157, 123, 255, 0.5), transparent 72%),
-    radial-gradient(36% 34% at 18% 80%, rgba(255, 159, 67, 0.4), transparent 72%);
-  filter: blur(30px) saturate(160%);
-  animation: overlay-aurora-in 0.5s ease-out, overlay-aurora-drift 9s ease-in-out 0.5s infinite alternate;
-}
-
-/* Success biases the wash greener to echo the checkmark/target-met color. */
-.status-message.success { color: #eafff6; }
-.status-message.success::before {
-  background:
-    radial-gradient(42% 42% at 30% 30%, rgba(79, 209, 197, 0.6), transparent 72%),
-    radial-gradient(40% 40% at 78% 36%, rgba(87, 226, 176, 0.5), transparent 72%),
-    radial-gradient(46% 46% at 60% 82%, rgba(124, 131, 255, 0.4), transparent 72%);
-}
-
-/* Wash sweeps up and scales in as it "covers" the UI, then drifts. */
-@keyframes overlay-aurora-in {
-  0%   { opacity: 0; transform: translate3d(0, 12%, 0) scale(1.15); }
-  100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
-}
-
-@keyframes overlay-aurora-drift {
-  0%   { transform: translate3d(0, 0, 0) scale(1) rotate(0deg); }
-  100% { transform: translate3d(2%, -2%, 0) scale(1.12) rotate(6deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .status-message.loading::before,
-  .status-message.success::before { animation: none; }
 }
 
 .status-message.info { background: rgba(20, 26, 50, 0.9); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }

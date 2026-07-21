@@ -1973,6 +1973,19 @@ async function submitWorklog() {
   }
 }
 
+// Blur the UI and surge the real background aurora so it appears to cover the
+// UI while a submit overlay is up. Idempotent — safe to call/exit repeatedly.
+function enterAuroraOverlay() {
+  document.body.classList.add("submitting");
+  document.documentElement.style.setProperty("--aurora-fill", "1.6");
+}
+function exitAuroraOverlay() {
+  if (!document.body.classList.contains("submitting")) return;
+  document.body.classList.remove("submitting");
+  // Restore the aurora's intensity to whatever the day's logged time implies.
+  updateHoursDisplay();
+}
+
 function showLoading(message = "Logging...") {
   // Clear any existing timeout
   if (statusTimeout) {
@@ -1988,6 +2001,8 @@ function showLoading(message = "Logging...") {
 
   // Add show class to fade in
   elements.statusMessage.classList.add("show");
+
+  enterAuroraOverlay();
 }
 
 function showStatus(message, type) {
@@ -1998,6 +2013,9 @@ function showStatus(message, type) {
   }
 
   if (type === "error") {
+    // Error is terminal — drop the submit blur/aurora surge so the modal
+    // shows over the clean UI.
+    exitAuroraOverlay();
     // Error: show modal with OK button that user must dismiss
     elements.statusMessage.className = "status-message error";
     elements.statusMessage.innerHTML = `
@@ -2008,12 +2026,13 @@ function showStatus(message, type) {
     elements.statusMessage.classList.add("show");
     elements.statusMessage.querySelector(".error-dismiss").addEventListener("click", dismissStatus);
   } else if (type === "success") {
-    // Success: transition from loading gray to green, then auto-dismiss
+    // Success: keep the blur/aurora surge through the flash, then auto-dismiss
     elements.statusMessage.textContent = sanitizeString(message, 200);
     elements.statusMessage.className = "status-message success show";
 
     statusTimeout = setTimeout(() => {
       elements.statusMessage.classList.remove("show");
+      exitAuroraOverlay();
       setTimeout(() => {
         elements.statusMessage.textContent = "";
         elements.statusMessage.className = "status-message";
@@ -2029,6 +2048,7 @@ function showStatus(message, type) {
 
     statusTimeout = setTimeout(() => {
       elements.statusMessage.classList.remove("show");
+      exitAuroraOverlay();
       setTimeout(() => {
         elements.statusMessage.textContent = "";
         elements.statusMessage.className = "status-message";
@@ -2040,6 +2060,7 @@ function showStatus(message, type) {
 
 function dismissStatus() {
   elements.statusMessage.classList.remove("show");
+  exitAuroraOverlay();
   setTimeout(() => {
     elements.statusMessage.innerHTML = "";
     elements.statusMessage.className = "status-message";
