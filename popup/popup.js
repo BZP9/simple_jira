@@ -188,6 +188,7 @@ function setupEventListeners() {
   elements.workDate.addEventListener("change", () => {
     updateDateLabel();
     scheduleWorklogLoad(elements.workDate.value);
+    pulseAuroraTransition();
   });
 
   // Ticket dropdown
@@ -415,12 +416,24 @@ function updateTimeChip() {
   elements.timeChipText.textContent = `${start} → ${end} · ${durText}${wiggleTag}`;
 }
 
+// Restart the aurora's one-shot transition animation (a brief drift/shimmer
+// on top of its ambient loop) whenever the user switches day or mode, so the
+// glass background visibly reacts instead of just holding steady.
+function pulseAuroraTransition() {
+  const body = document.body;
+  body.classList.remove("aurora-pulse");
+  void body.offsetWidth; // force reflow so re-adding the class restarts the CSS animation
+  body.classList.add("aurora-pulse");
+  setTimeout(() => body.classList.remove("aurora-pulse"), 900);
+}
+
 function changeDate(days) {
   const current = new Date(elements.workDate.value);
   current.setDate(current.getDate() + days);
   elements.workDate.value = current.toISOString().split("T")[0];
   updateDateLabel();
   scheduleWorklogLoad(elements.workDate.value);
+  pulseAuroraTransition();
 }
 
 // Debounced worklog loading - clears display immediately, loads after 100ms delay
@@ -723,6 +736,14 @@ function updateHoursDisplay() {
     elements.targetBarFill.style.width = `${pct}%`;
     elements.targetBarFill.classList.toggle("met", metWithinMargin);
   }
+
+  // Drive the aurora's intensity from how full the day is (dim when empty,
+  // vivid near/at target). Uncapped a bit above 1 so overtime keeps glowing
+  // rather than plateauing right at the target.
+  const auroraFill = targetMinutes > 0
+    ? Math.max(0, Math.min(1.2, loggedMinutesToday / targetMinutes))
+    : 0;
+  document.documentElement.style.setProperty("--aurora-fill", auroraFill.toFixed(3));
 
   // Update monthly summary from cache
   updateMonthSummary();
@@ -2422,6 +2443,7 @@ function showOverviewPage() {
   elements.overviewPage.style.display = "block";
   renderMonthCalendar();
   loadMonthOverview(overviewYear, overviewMonth);
+  pulseAuroraTransition();
 }
 
 function showDailyPage(dateStr) {
@@ -2432,6 +2454,7 @@ function showDailyPage(dateStr) {
     updateDateLabel();
     scheduleWorklogLoad(dateStr);
   }
+  pulseAuroraTransition();
 }
 
 function navigateOverviewMonth(delta) {
@@ -2441,6 +2464,7 @@ function navigateOverviewMonth(delta) {
   overviewDayStats = {};
   renderMonthCalendar();
   loadMonthOverview(overviewYear, overviewMonth);
+  pulseAuroraTransition();
 }
 
 // A day counts as met once its logged time is within the wiggle margin of the
