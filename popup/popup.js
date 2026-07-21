@@ -126,6 +126,7 @@ function initElements() {
 
   // Auto-advance & presets
   elements.autoAdvance = document.getElementById("auto-advance");
+  elements.rememberTicket = document.getElementById("remember-ticket");
   elements.presetDescriptions = document.getElementById("preset-descriptions");
   elements.saveDescPreset = document.getElementById("save-desc-preset");
 
@@ -259,6 +260,11 @@ function setupEventListeners() {
   // Auto-advance preference
   elements.autoAdvance.addEventListener("change", async () => {
     await browser.storage.local.set({ autoAdvance: elements.autoAdvance.checked });
+  });
+
+  // Remember-last-ticket preference
+  elements.rememberTicket.addEventListener("change", async () => {
+    await browser.storage.local.set({ rememberTicket: elements.rememberTicket.checked });
   });
 
   // Wiggle settings (persisted so they survive reopening the popup)
@@ -556,7 +562,9 @@ async function checkLoginStatus() {
     "dailyHours",
     "autoAdvance",
     "wiggleEnabled",
-    "wiggleValue"
+    "wiggleValue",
+    "rememberTicket",
+    "lastTicket"
   ]);
 
   if (data.jiraDomain && data.jiraEmail && data.jiraToken) {
@@ -571,6 +579,17 @@ async function checkLoginStatus() {
     elements.wiggleEnabled.checked = wiggleEnabled;
     elements.wiggleValue.value = wiggleMaxMinutes;
     elements.wiggleInputGroup.style.display = wiggleEnabled ? "flex" : "none";
+
+    // Memory mode: default on. Restore whichever ticket was last selected
+    // immediately, independent of the day's worklog load (which can be slow
+    // or fail) — the point is to never make you re-pick a ticket you were
+    // already working from. autoSelectDefaultTicket() (recent/pinned
+    // fallback) is a no-op once a ticket is already selected here.
+    const rememberTicket = data.rememberTicket !== false; // default true
+    elements.rememberTicket.checked = rememberTicket;
+    if (rememberTicket && data.lastTicket && data.lastTicket.key) {
+      selectTicket(data.lastTicket.key, data.lastTicket.summary || "");
+    }
 
     showMainPage();
     loadTodayWorklogs();
@@ -1480,6 +1499,7 @@ function selectTicket(key, summary) {
   syncDurationInputsFromEndTime();
   updateDurationBadgeDisplay();
   saveRecentTicket(key, summary);
+  browser.storage.local.set({ lastTicket: { key, summary } });
 }
 
 function setTicketDropdownLabel(key, summary) {
@@ -1670,6 +1690,9 @@ function clearSelectedTicket() {
   // Reset dropdown label
   elements.ticketDropdownLabel.textContent = "Select a ticket…";
   elements.ticketDropdownLabel.classList.remove("has-selection");
+  // An explicit clear means "don't re-pick this for me" — otherwise memory
+  // mode would just re-select the same ticket next time the popup opens.
+  browser.storage.local.remove(["lastTicket"]);
 }
 
 async function submitWorklog() {
@@ -2746,7 +2769,14 @@ async function loadMonthOverview(year, month, forceRefresh = false) {
       await setCachedWorklogs(date, sorted, totalMinutes);
     }
 
-    // Mark weekdays up to today with no worklogs as 0-minute loaded
+    // Mark weekdays up to today with no worklogs as 0-minute loaded. This
+    // MUST also persist to the worklog cache (setCachedWorklogs), not just
+    // overviewDayStats in-memory — otherwise the confirmed-zero knowledge
+    // evaporates the moment the popup closes. Next time the fetch guard
+    // serves this month from cache (skipping the live fetch entirely), only
+    // days that had real worklogs were ever persisted, so every previously
+    // zero-filled day reverts to "no data" (?) instead of staying "missed" —
+    // exactly the bug where only a couple of real-data days ever show up.
     const cursor = new Date(startDate);
     const endLimit = new Date(Math.min(new Date(endDate), new Date(today)));
     while (cursor <= endLimit) {
@@ -2754,6 +2784,7 @@ async function loadMonthOverview(year, month, forceRefresh = false) {
       const dow = cursor.getDay();
       if (dow !== 0 && dow !== 6 && !overviewDayStats[dateStr]) {
         overviewDayStats[dateStr] = { minutes: 0, count: 0, loaded: true };
+        await setCachedWorklogs(dateStr, [], 0);
       }
       cursor.setDate(cursor.getDate() + 1);
     }
