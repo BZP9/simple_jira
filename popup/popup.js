@@ -2598,9 +2598,32 @@ function navigateOverviewMonth(delta) {
   overviewMonth += delta;
   if (overviewMonth > 11) { overviewMonth = 0; overviewYear++; }
   if (overviewMonth < 0)  { overviewMonth = 11; overviewYear--; }
-  overviewDayStats = {};
-  renderMonthCalendar();
-  loadMonthOverview(overviewYear, overviewMonth);
+  transitionCalendar(() => {
+    overviewDayStats = {};
+    renderMonthCalendar();
+    loadMonthOverview(overviewYear, overviewMonth);
+  });
+}
+
+// Blur + fade the calendar out, swap its contents mid-fade, then ease it back
+// in — so replacing the grid on month navigation glides instead of snapping.
+// (The class lives on #overview-calendar; renderMonthCalendar only replaces
+// that element's innerHTML, so the class and its transition survive the swap.)
+function transitionCalendar(swap) {
+  const cal = elements.overviewCalendar;
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!cal || reduce) {
+    swap();
+    return;
+  }
+  cal.classList.add("switching");
+  // Swap content once the blur-out has fully played (matches the 0.2s CSS
+  // transition), then remove the class to blur back in — a constant 0.2s
+  // each way, not a variable delay.
+  setTimeout(() => {
+    swap();
+    requestAnimationFrame(() => cal.classList.remove("switching"));
+  }, 200);
 }
 
 // A day counts as met once its logged time is within the wiggle margin of the

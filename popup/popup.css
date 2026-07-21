@@ -1351,6 +1351,19 @@ header h1 {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 3px;
+  /* Smooth month-to-month swaps: only THIS grid blurs/fades (scoped here, not
+     on the page or section), driven by the .switching class toggled in
+     transitionCalendar(). Constant 0.2s each way. */
+  transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+.overview-calendar.switching {
+  filter: blur(9px);
+  opacity: 0.3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-calendar { transition: none; }
 }
 
 .overview-dow {
