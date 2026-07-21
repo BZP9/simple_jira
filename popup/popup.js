@@ -1015,11 +1015,17 @@ async function getCachedWorklogs(date) {
   const cached = cache[date];
   if (!cached || !cached.worklogs) return null;
 
-  // Validate cache integrity
-  const calculatedMinutes = cached.worklogs.reduce((sum, log) => sum + (log.minutes || 0), 0);
-  if (calculatedMinutes !== cached.totalMinutes) return null;
-
-  return cached;
+  // Derive the total from the individual entries rather than trusting the
+  // stored totalMinutes field: summing independently-rounded per-entry
+  // minutes doesn't always equal Math.round(sum of raw seconds) (e.g. three
+  // 89-second logs round to 1min each = 3, but the true sum 267s rounds to
+  // 4) — that's ordinary rounding drift, not corruption. An earlier version
+  // rejected the whole cache entry whenever these disagreed, which combined
+  // with the fetch guard meant: guard says "already fetched, don't re-hit
+  // Jira" while this check independently threw the cached data away, leaving
+  // the board blank until the guard window elapsed.
+  const totalMinutes = cached.worklogs.reduce((sum, log) => sum + (log.minutes || 0), 0);
+  return { worklogs: cached.worklogs, totalMinutes };
 }
 
 async function setCachedWorklogs(date, worklogs, totalMinutes) {
