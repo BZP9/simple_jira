@@ -1476,18 +1476,22 @@ body {
    (outer) compose as independent transforms rather than fighting over the
    same `transform` property on one element.
 
-   .aurora-wrap: no motion of its own at rest; gets a brief rotate keyframe
-   on nav (see aurora-shift-pos/neg below), then settles back to level.
+   .aurora-wrap: no motion of its own at rest; gets a brief "stirred" ripple
+   (see .aurora-stir below) on every click anywhere in the popup, pivoting
+   near the click point.
    .aurora-field: the actual gradient. Continuously drifts (translate+scale)
    and its opacity/saturation/crispness track --aurora-fill — dim and soft
    on an empty day, vivid and a touch sharper near/past target — fading
    smoothly (transition) rather than ever flashing. */
 .aurora-wrap {
   position: fixed;
-  inset: -30% -30% -30% -30%;
+  /* Generous overscan: the stir can swing up to ~140deg around an
+     off-center pivot (see stirAurora in popup.js), so the layer needs
+     enough margin that its own edge never rotates into view. */
+  inset: -65% -65% -65% -65%;
   z-index: 0;
   pointer-events: none;
-  transform-origin: 50% 50%;
+  transform-origin: var(--stir-x, 50%) var(--stir-y, 50%);
 }
 
 .aurora-field {
@@ -1512,29 +1516,57 @@ body {
   100% { transform: translate3d(-2%, 2%, 0) scale(1.04); }
 }
 
-/* Navigation cue: a brief, smooth rotate-and-settle (not a flash), restarted
-   via a JS class toggle + forced reflow each time the user switches day or
-   mode. Direction alternates call to call so it reads as a lively nudge
-   rather than a mechanical snap in one direction. */
-.aurora-wrap.aurora-shift-pos { animation: aurora-rotate-pos 1.4s cubic-bezier(0.22, 1, 0.36, 1); }
-.aurora-wrap.aurora-shift-neg { animation: aurora-rotate-neg 1.4s cubic-bezier(0.22, 1, 0.36, 1); }
-
-@keyframes aurora-rotate-pos {
-  0%   { transform: rotate(0deg); }
-  40%  { transform: rotate(4deg); }
-  100% { transform: rotate(0deg); }
+/* Fixed-intensity orange accent — a steady ~60% presence that does NOT scale
+   with --aurora-fill like .aurora-field does, so it stays clearly visible
+   even on a near-empty day. Drifts on its own independent, slightly slower
+   cycle (different duration/keyframe shape than aurora-drift) so the two
+   layers don't move in lockstep — reads as separate depths, not one layer
+   recolored. Being a sibling of .aurora-field inside #aurora-wrap, it
+   automatically stirs/rotates along with everything else on interaction. */
+.aurora-accent {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 38% at 75% 78%, rgba(255, 159, 67, 0.55), transparent 72%),
+    radial-gradient(30% 28% at 18% 62%, rgba(255, 183, 94, 0.35), transparent 74%);
+  opacity: 0.6;
+  filter: blur(27px) saturate(150%);
+  animation: aurora-drift-accent 34s ease-in-out infinite alternate;
 }
 
-@keyframes aurora-rotate-neg {
-  0%   { transform: rotate(0deg); }
-  40%  { transform: rotate(-4deg); }
-  100% { transform: rotate(0deg); }
+@keyframes aurora-drift-accent {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-2.5%, 1.5%, 0) scale(1.06); }
+  100% { transform: translate3d(2%, -2%, 0) scale(1.02); }
+}
+
+/* Stir cue: like disturbing water — a big, randomized sweep (60-140deg, see
+   stirAurora in popup.js) that overshoots, swings back a touch the other
+   way, then settles (a damped oscillation, not a flat snap), plus a brief
+   saturation/brightness bump as if catching the light. Big enough that the
+   gradient blobs visibly travel across corners (top-right to top-left to
+   bottom-left, etc.) rather than just wiggling in place. JS sets
+   --stir-angle (magnitude + direction both random, so no two stirs trace
+   the same arc) and --stir-x/--stir-y (the click position, used as the
+   pivot above) before restarting this via a class toggle + forced reflow.
+   Longer duration than the old small-wiggle version so the bigger sweep
+   still reads as smooth rather than frantic. */
+.aurora-wrap.aurora-stir {
+  animation: aurora-stir 2.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes aurora-stir {
+  0%   { transform: rotate(0deg) scale(1); filter: saturate(100%) brightness(100%); }
+  30%  { transform: rotate(var(--stir-angle, 90deg)) scale(1.05); filter: saturate(140%) brightness(114%); }
+  62%  { transform: rotate(calc(var(--stir-angle, 90deg) * -0.3)) scale(0.98); filter: saturate(108%) brightness(103%); }
+  100% { transform: rotate(0deg) scale(1); filter: saturate(100%) brightness(100%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .aurora-field { animation: none; transition: opacity 0.3s ease; }
-  .aurora-wrap.aurora-shift-pos,
-  .aurora-wrap.aurora-shift-neg { animation: none; }
+  .aurora-accent { animation: none; }
+  .aurora-wrap.aurora-stir { animation: none; }
 }
 
 .container {

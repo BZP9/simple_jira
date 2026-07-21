@@ -159,6 +159,10 @@ function initElements() {
 }
 
 function setupEventListeners() {
+  // Stir the aurora on any click anywhere in the popup (capture phase so it
+  // still fires even through handlers that call stopPropagation elsewhere).
+  document.addEventListener("click", stirAurora, true);
+
   // Login / Refresh
   elements.loginBtn.addEventListener("click", handleLogin);
   elements.logoutBtn.addEventListener("click", handleLogout);
@@ -188,7 +192,6 @@ function setupEventListeners() {
   elements.workDate.addEventListener("change", () => {
     updateDateLabel();
     scheduleWorklogLoad(elements.workDate.value);
-    pulseAuroraTransition();
   });
 
   // Ticket dropdown
@@ -416,22 +419,38 @@ function updateTimeChip() {
   elements.timeChipText.textContent = `${start} → ${end} · ${durText}${wiggleTag}`;
 }
 
-// Nudge the aurora with a brief, smooth rotate-and-settle whenever the user
-// switches day or mode — a rotation cue instead of a flash. Alternates
-// direction each call so repeated switches (prev/next day) feel like a
-// lively back-and-forth rather than a mechanical snap one way.
-let auroraShiftSign = 1;
-function pulseAuroraTransition() {
+// Stir the aurora like touching water: every click anywhere in the popup
+// (attached once, capture phase, in setupEventListeners) sends a big, fully
+// randomized swing through it — magnitude and direction both random each
+// time, so it reads as a real sweep across corners (top-right to top-left to
+// bottom-left, etc.) rather than a small in-place wiggle, and no two stirs
+// trace the same arc. Pivots near wherever you actually clicked. Capture
+// phase so it still fires even through handlers elsewhere that call
+// stopPropagation (e.g. the unpin button, worklog action buttons).
+function stirAurora(e) {
   const wrap = document.getElementById("aurora-wrap");
   if (!wrap) return;
-  const cls = auroraShiftSign > 0 ? "aurora-shift-pos" : "aurora-shift-neg";
-  const otherCls = auroraShiftSign > 0 ? "aurora-shift-neg" : "aurora-shift-pos";
-  auroraShiftSign *= -1;
 
-  wrap.classList.remove(cls, otherCls);
+  const hasPoint = e && typeof e.clientX === "number" && typeof e.clientY === "number";
+  // Clamp the pivot inward a bit: a huge rotation around a pivot right at the
+  // extreme edge/corner can swing the gradient layer's own edge into view
+  // despite the overscan margin; keeping the pivot within the middle band
+  // avoids that while still feeling anchored near the click.
+  const rawX = hasPoint ? (e.clientX / window.innerWidth) * 100 : 50;
+  const rawY = hasPoint ? (e.clientY / window.innerHeight) * 100 : 50;
+  const xPct = Math.max(20, Math.min(80, rawX));
+  const yPct = Math.max(20, Math.min(80, rawY));
+  const sign = Math.random() < 0.5 ? 1 : -1;
+  const magnitude = 60 + Math.random() * 80; // 60..140 degrees — a real sweep, not a wiggle
+
+  wrap.style.setProperty("--stir-x", `${xPct.toFixed(1)}%`);
+  wrap.style.setProperty("--stir-y", `${yPct.toFixed(1)}%`);
+  wrap.style.setProperty("--stir-angle", `${(sign * magnitude).toFixed(2)}deg`);
+
+  wrap.classList.remove("aurora-stir");
   void wrap.offsetWidth; // force reflow so re-adding the class restarts the CSS animation
-  wrap.classList.add(cls);
-  wrap.addEventListener("animationend", () => wrap.classList.remove(cls), { once: true });
+  wrap.classList.add("aurora-stir");
+  wrap.addEventListener("animationend", () => wrap.classList.remove("aurora-stir"), { once: true });
 }
 
 function changeDate(days) {
@@ -440,7 +459,6 @@ function changeDate(days) {
   elements.workDate.value = current.toISOString().split("T")[0];
   updateDateLabel();
   scheduleWorklogLoad(elements.workDate.value);
-  pulseAuroraTransition();
 }
 
 // Debounced worklog loading - clears display immediately, loads after 100ms delay
@@ -2456,7 +2474,6 @@ function showOverviewPage() {
   elements.overviewPage.style.display = "block";
   renderMonthCalendar();
   loadMonthOverview(overviewYear, overviewMonth);
-  pulseAuroraTransition();
 }
 
 function showDailyPage(dateStr) {
@@ -2467,7 +2484,6 @@ function showDailyPage(dateStr) {
     updateDateLabel();
     scheduleWorklogLoad(dateStr);
   }
-  pulseAuroraTransition();
 }
 
 function navigateOverviewMonth(delta) {
@@ -2477,7 +2493,6 @@ function navigateOverviewMonth(delta) {
   overviewDayStats = {};
   renderMonthCalendar();
   loadMonthOverview(overviewYear, overviewMonth);
-  pulseAuroraTransition();
 }
 
 // A day counts as met once its logged time is within the wiggle margin of the
