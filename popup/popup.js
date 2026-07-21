@@ -256,16 +256,18 @@ function setupEventListeners() {
     await browser.storage.local.set({ autoAdvance: elements.autoAdvance.checked });
   });
 
-  // Wiggle settings
-  elements.wiggleEnabled.addEventListener("change", () => {
+  // Wiggle settings (persisted so they survive reopening the popup)
+  elements.wiggleEnabled.addEventListener("change", async () => {
     wiggleEnabled = elements.wiggleEnabled.checked;
     elements.wiggleInputGroup.style.display = wiggleEnabled ? "flex" : "none";
+    await browser.storage.local.set({ wiggleEnabled });
     updateDuration();
   });
 
-  elements.wiggleValue.addEventListener("change", () => {
+  elements.wiggleValue.addEventListener("change", async () => {
     wiggleMaxMinutes = Math.max(1, Math.min(30, parseInt(elements.wiggleValue.value) || 10));
     elements.wiggleValue.value = wiggleMaxMinutes;
+    await browser.storage.local.set({ wiggleValue: wiggleMaxMinutes });
     updateDuration();
   });
 
@@ -398,13 +400,18 @@ function updateDurationBadgeDisplay() {
 }
 
 // Keep the collapsed chip in sync with the current start/end/duration.
+// When wiggle is on, the logged span is randomised at submit, so the chip
+// marks the planned duration as approximate (~) to signal it will drift.
 function updateTimeChip() {
   if (!elements.timeChipText) return;
   const start = elements.startTime.value || "--:--";
   const end = elements.endTime.value || "--:--";
   const duration = calculateDurationMinutes();
-  const durText = duration > 0 ? formatMinutes(duration) : "—";
-  elements.timeChipText.textContent = `${start} → ${end} · ${durText}`;
+  const durText = duration > 0
+    ? `${wiggleEnabled ? "~" : ""}${formatMinutes(duration)}`
+    : "—";
+  const wiggleTag = wiggleEnabled ? " · wiggle" : "";
+  elements.timeChipText.textContent = `${start} → ${end} · ${durText}${wiggleTag}`;
 }
 
 function changeDate(days) {
@@ -475,7 +482,9 @@ async function checkLoginStatus() {
     "jiraEmail",
     "jiraToken",
     "dailyHours",
-    "autoAdvance"
+    "autoAdvance",
+    "wiggleEnabled",
+    "wiggleValue"
   ]);
 
   if (data.jiraDomain && data.jiraEmail && data.jiraToken) {
@@ -483,6 +492,14 @@ async function checkLoginStatus() {
     dailyHoursTarget = data.dailyHours || 8;
     elements.dailyHours.value = dailyHoursTarget;
     elements.autoAdvance.checked = data.autoAdvance || false;
+
+    // Restore wiggle preference (persisted across popup sessions)
+    wiggleEnabled = data.wiggleEnabled || false;
+    wiggleMaxMinutes = data.wiggleValue || 10;
+    elements.wiggleEnabled.checked = wiggleEnabled;
+    elements.wiggleValue.value = wiggleMaxMinutes;
+    elements.wiggleInputGroup.style.display = wiggleEnabled ? "flex" : "none";
+
     showMainPage();
     loadTodayWorklogs();
   } else {
