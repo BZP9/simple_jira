@@ -2653,12 +2653,26 @@ async function loadMonthOverview(year, month, forceRefresh = false) {
   const today = new Date().toISOString().split("T")[0];
   const monthScope = `month:${year}-${pad(month + 1)}`;
 
-  // Load from cache first
-  const cache = await getWorklogCache();
-  for (const [date, cached] of Object.entries(cache)) {
-    if (date >= startDate && date <= endDate && cached.worklogs) {
-      overviewDayStats[date] = { minutes: cached.totalMinutes, count: cached.worklogs.length, loaded: true };
+  // Load from cache first — go through the same validated reader the daily
+  // view uses (getCachedWorklogs derives the total from the worklogs array
+  // itself) instead of trusting the raw cache's stored totalMinutes
+  // directly. Reading the raw field here let some cached days silently fail
+  // to render (or render with a stale total) whenever it didn't match the
+  // array — exactly the class of bug fixed for the daily view previously;
+  // this consolidates both views onto the one already-fixed code path.
+  const cacheCursor = new Date(startDate);
+  const cacheEnd = new Date(endDate);
+  while (cacheCursor <= cacheEnd) {
+    const cacheDateStr = cacheCursor.toISOString().split("T")[0];
+    const cachedDay = await getCachedWorklogs(cacheDateStr);
+    if (cachedDay) {
+      overviewDayStats[cacheDateStr] = {
+        minutes: cachedDay.totalMinutes,
+        count: cachedDay.worklogs.length,
+        loaded: true
+      };
     }
+    cacheCursor.setDate(cacheCursor.getDate() + 1);
   }
   renderMonthCalendar();
 

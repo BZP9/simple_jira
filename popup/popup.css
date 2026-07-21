@@ -1522,13 +1522,15 @@ body {
   100% { transform: translate3d(-2%, 2%, 0) scale(1.04); }
 }
 
-/* Fixed-intensity orange accent — a steady ~60% presence that does NOT scale
-   with --aurora-fill like .aurora-field does, so it stays clearly visible
-   even on a near-empty day. Drifts on its own independent, slightly slower
-   cycle (different duration/keyframe shape than aurora-drift) so the two
-   layers don't move in lockstep — reads as separate depths, not one layer
-   recolored. Being a sibling of .aurora-field inside #aurora-wrap, it
-   automatically stirs/rotates along with everything else on interaction. */
+/* Orange accent — also tracks --aurora-fill (log time), but remapped into a
+   narrower 10-60% band instead of the main field's ~22-94% range, so it
+   stays visible as a steady presence even on an empty day rather than going
+   fully dark, while still climbing as you log more. Drifts on its own
+   independent, slightly slower cycle (different duration/keyframe shape
+   than aurora-drift) so the two layers don't move in lockstep — reads as
+   separate depths, not one layer recolored. Being a sibling of .aurora-field
+   inside #aurora-wrap, it automatically stirs/rotates along with everything
+   else on interaction. */
 .aurora-accent {
   position: absolute;
   inset: 0;
@@ -1536,9 +1538,10 @@ body {
   background:
     radial-gradient(42% 38% at 75% 78%, rgba(255, 159, 67, 0.55), transparent 72%),
     radial-gradient(30% 28% at 18% 62%, rgba(255, 183, 94, 0.35), transparent 74%);
-  opacity: 0.6;
+  opacity: calc(0.1 + var(--aurora-fill) * 0.5);
   filter: blur(27px) saturate(150%);
   animation: aurora-drift-accent 34s ease-in-out infinite alternate;
+  transition: opacity 1.1s ease;
 }
 
 @keyframes aurora-drift-accent {
