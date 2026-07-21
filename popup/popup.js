@@ -416,15 +416,22 @@ function updateTimeChip() {
   elements.timeChipText.textContent = `${start} → ${end} · ${durText}${wiggleTag}`;
 }
 
-// Restart the aurora's one-shot transition animation (a brief drift/shimmer
-// on top of its ambient loop) whenever the user switches day or mode, so the
-// glass background visibly reacts instead of just holding steady.
+// Nudge the aurora with a brief, smooth rotate-and-settle whenever the user
+// switches day or mode — a rotation cue instead of a flash. Alternates
+// direction each call so repeated switches (prev/next day) feel like a
+// lively back-and-forth rather than a mechanical snap one way.
+let auroraShiftSign = 1;
 function pulseAuroraTransition() {
-  const body = document.body;
-  body.classList.remove("aurora-pulse");
-  void body.offsetWidth; // force reflow so re-adding the class restarts the CSS animation
-  body.classList.add("aurora-pulse");
-  setTimeout(() => body.classList.remove("aurora-pulse"), 900);
+  const wrap = document.getElementById("aurora-wrap");
+  if (!wrap) return;
+  const cls = auroraShiftSign > 0 ? "aurora-shift-pos" : "aurora-shift-neg";
+  const otherCls = auroraShiftSign > 0 ? "aurora-shift-neg" : "aurora-shift-pos";
+  auroraShiftSign *= -1;
+
+  wrap.classList.remove(cls, otherCls);
+  void wrap.offsetWidth; // force reflow so re-adding the class restarts the CSS animation
+  wrap.classList.add(cls);
+  wrap.addEventListener("animationend", () => wrap.classList.remove(cls), { once: true });
 }
 
 function changeDate(days) {

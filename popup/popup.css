@@ -1471,16 +1471,28 @@ body {
   overflow-x: hidden;
 }
 
-/* Aurora field — soft drifting color pools behind the glass. Intensity
-   (opacity/saturation/crispness) tracks --aurora-fill: dim and soft when the
-   day is empty, vivid and a touch sharper as you approach/pass target. The
-   drift loop also runs a little quicker on fuller days. */
-body::before {
-  content: "";
+/* Aurora — two nested real layers instead of pseudo-elements, so the
+   continuous ambient drift (inner) and the occasional navigation rotate
+   (outer) compose as independent transforms rather than fighting over the
+   same `transform` property on one element.
+
+   .aurora-wrap: no motion of its own at rest; gets a brief rotate keyframe
+   on nav (see aurora-shift-pos/neg below), then settles back to level.
+   .aurora-field: the actual gradient. Continuously drifts (translate+scale)
+   and its opacity/saturation/crispness track --aurora-fill — dim and soft
+   on an empty day, vivid and a touch sharper near/past target — fading
+   smoothly (transition) rather than ever flashing. */
+.aurora-wrap {
   position: fixed;
   inset: -30% -30% -30% -30%;
   z-index: 0;
   pointer-events: none;
+  transform-origin: 50% 50%;
+}
+
+.aurora-field {
+  position: absolute;
+  inset: 0;
   background:
     radial-gradient(38% 34% at 18% 12%, rgba(124, 131, 255, 0.38), transparent 70%),
     radial-gradient(40% 36% at 88% 22%, rgba(79, 209, 197, 0.28), transparent 72%),
@@ -1500,35 +1512,29 @@ body::before {
   100% { transform: translate3d(-2%, 2%, 0) scale(1.04); }
 }
 
-/* One-shot transition flash — restarted (via a JS class toggle + reflow) each
-   time the user switches day or mode, so the glass background visibly
-   reacts to navigation instead of only ever drifting ambiently. */
-body::after {
-  content: "";
-  position: fixed;
-  inset: -30% -30% -30% -30%;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(45% 40% at 50% 40%, rgba(157, 123, 255, 0.5), transparent 70%),
-    radial-gradient(40% 36% at 60% 70%, rgba(79, 209, 197, 0.35), transparent 72%);
-  filter: blur(26px) saturate(160%);
-  opacity: 0;
+/* Navigation cue: a brief, smooth rotate-and-settle (not a flash), restarted
+   via a JS class toggle + forced reflow each time the user switches day or
+   mode. Direction alternates call to call so it reads as a lively nudge
+   rather than a mechanical snap in one direction. */
+.aurora-wrap.aurora-shift-pos { animation: aurora-rotate-pos 1.4s cubic-bezier(0.22, 1, 0.36, 1); }
+.aurora-wrap.aurora-shift-neg { animation: aurora-rotate-neg 1.4s cubic-bezier(0.22, 1, 0.36, 1); }
+
+@keyframes aurora-rotate-pos {
+  0%   { transform: rotate(0deg); }
+  40%  { transform: rotate(4deg); }
+  100% { transform: rotate(0deg); }
 }
 
-body.aurora-pulse::after {
-  animation: aurora-pulse 0.9s ease-out;
-}
-
-@keyframes aurora-pulse {
-  0%   { opacity: 0;    transform: translate3d(0, 0, 0) scale(0.96); }
-  35%  { opacity: 0.55; transform: translate3d(-1.5%, 1%, 0) scale(1.05); }
-  100% { opacity: 0;    transform: translate3d(1.5%, -1%, 0) scale(1); }
+@keyframes aurora-rotate-neg {
+  0%   { transform: rotate(0deg); }
+  40%  { transform: rotate(-4deg); }
+  100% { transform: rotate(0deg); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  body::before { animation: none; transition: opacity 0.3s ease; }
-  body.aurora-pulse::after { animation: none; }
+  .aurora-field { animation: none; transition: opacity 0.3s ease; }
+  .aurora-wrap.aurora-shift-pos,
+  .aurora-wrap.aurora-shift-neg { animation: none; }
 }
 
 .container {

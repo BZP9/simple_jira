@@ -5,6 +5,13 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
+  <!-- Decorative aurora background. Split into two nested layers so their
+       transforms compose independently: the outer wrap gets a brief rotate
+       nudge on navigation (transition), the inner field runs the continuous
+       ambient drift (animation) and tracks the day's fill intensity. -->
+  <div id="aurora-wrap" class="aurora-wrap" aria-hidden="true">
+    <div class="aurora-field"></div>
+  </div>
   <div class="container">
     <!-- Login Page -->
     <div id="login-page" class="page">
