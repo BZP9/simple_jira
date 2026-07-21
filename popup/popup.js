@@ -803,18 +803,6 @@ function calculateDurationMinutes() {
   return endMinutes - startMinutes;
 }
 
-function applyWiggle(baseDurationMinutes) {
-  if (!wiggleEnabled || baseDurationMinutes <= 0) {
-    return baseDurationMinutes;
-  }
-
-  const wiggleStart = Math.floor(Math.random() * (wiggleMaxMinutes + 1));
-  const wiggleEnd = Math.floor(Math.random() * (wiggleMaxMinutes + 1));
-  const adjustedDuration = baseDurationMinutes - wiggleStart - wiggleEnd;
-
-  return Math.max(1, adjustedDuration);
-}
-
 function updateDuration() {
   const duration = calculateDurationMinutes();
 
@@ -1565,8 +1553,20 @@ async function submitWorklog() {
     return;
   }
 
-  // Apply wiggle effect
-  durationMinutes = applyWiggle(durationMinutes);
+  // Apply wiggle: jitter the start later AND pull the end in, so both the
+  // start time and the duration drift off round numbers (looks hand-entered).
+  // logged span = (end - wiggleEnd) - (start + wiggleStart)
+  let startForLog = start;
+  if (wiggleEnabled && durationMinutes > 0) {
+    const wiggleStart = Math.floor(Math.random() * (wiggleMaxMinutes + 1));
+    const wiggleEnd = Math.floor(Math.random() * (wiggleMaxMinutes + 1));
+    const [sh, sm] = start.split(":").map(Number);
+    const shifted = sh * 60 + sm + wiggleStart;
+    const nh = Math.floor(shifted / 60) % 24;
+    const nm = shifted % 60;
+    startForLog = `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
+    durationMinutes = Math.max(1, durationMinutes - wiggleStart - wiggleEnd);
+  }
 
   const domain = await getJiraDomain();
 
@@ -1583,12 +1583,12 @@ async function submitWorklog() {
 
   // Create proper ISO 8601 timestamp with user's local timezone
   // Jira expects format like: 2024-01-14T09:00:00.000+0800
-  const localDate = new Date(`${date}T${start}:00`);
+  const localDate = new Date(`${date}T${startForLog}:00`);
   const tzOffset = -localDate.getTimezoneOffset();
   const tzHours = Math.floor(Math.abs(tzOffset) / 60).toString().padStart(2, "0");
   const tzMinutes = (Math.abs(tzOffset) % 60).toString().padStart(2, "0");
   const tzSign = tzOffset >= 0 ? "+" : "-";
-  const started = `${date}T${start}:00.000${tzSign}${tzHours}${tzMinutes}`;
+  const started = `${date}T${startForLog}:00.000${tzSign}${tzHours}${tzMinutes}`;
 
   const payload = {
     timeSpentSeconds: durationMinutes * 60,
