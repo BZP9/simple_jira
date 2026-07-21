@@ -684,19 +684,34 @@ function sanitizeString(str, maxLength = 1000) {
   return String(str).slice(0, maxLength);
 }
 
+// With wiggle on, each entry can shave up to 2*wiggle minutes, so a full day
+// lands up to 2*wiggle*entries short of target. Treat the day as met within
+// that margin (the accepted margin) so "Done" and auto-advance still fire.
+function targetToleranceMinutes(entryCount) {
+  if (!wiggleEnabled) return 0;
+  return 2 * wiggleMaxMinutes * Math.max(1, entryCount);
+}
+
 function updateHoursDisplay() {
   const targetMinutes = dailyHoursTarget * 60;
 
   elements.loggedHours.textContent = formatMinutes(loggedMinutesToday);
 
   const remaining = targetMinutes - loggedMinutesToday;
-  if (remaining >= 0) {
+  const tolerance = targetToleranceMinutes(loggedWorklogs.length);
+  const metWithinMargin = loggedMinutesToday >= targetMinutes - tolerance;
+
+  if (remaining <= 0) {
+    // Over target — show excess
+    elements.remainingHours.textContent = `+${formatMinutes(Math.abs(remaining))}`;
+    elements.remainingHours.style.color = "#57e2b0";
+  } else if (metWithinMargin) {
+    // Within the wiggle margin — effectively done for the day
+    elements.remainingHours.textContent = `${formatMinutes(remaining)} ✓`;
+    elements.remainingHours.style.color = "#57e2b0";
+  } else {
     elements.remainingHours.textContent = formatMinutes(remaining);
     elements.remainingHours.style.color = "";
-  } else {
-    // Show overtime as negative/excess
-    elements.remainingHours.textContent = `+${formatMinutes(Math.abs(remaining))}`;
-    elements.remainingHours.style.color = "#57e2b0"; // Green for overtime
   }
 
   // Update target progress bar
@@ -705,7 +720,7 @@ function updateHoursDisplay() {
       ? Math.max(0, Math.min(100, (loggedMinutesToday / targetMinutes) * 100))
       : 0;
     elements.targetBarFill.style.width = `${pct}%`;
-    elements.targetBarFill.classList.toggle("met", loggedMinutesToday >= targetMinutes);
+    elements.targetBarFill.classList.toggle("met", metWithinMargin);
   }
 
   // Update monthly summary from cache
@@ -1672,6 +1687,9 @@ async function submitWorklog() {
     const newLoggedMinutes = loggedMinutesToday + (isEditing ? 0 : durationMinutes);
     const targetMinutes = dailyHoursTarget * 60;
     const newRemaining = targetMinutes - newLoggedMinutes;
+    // Count this new entry toward the wiggle tolerance so the day can register
+    // as done within the accepted margin (otherwise wiggle never reaches 0).
+    const advanceTolerance = targetToleranceMinutes(loggedWorklogs.length + (isEditing ? 0 : 1));
 
     showStatus(`${isEditing ? "Updated" : "Logged"} ${formatMinutes(durationMinutes)} to ${selectedTicket.key}`, "success");
 
@@ -1679,7 +1697,7 @@ async function submitWorklog() {
     elements.worklogDesc.value = "";
 
     // Check if we should auto-advance to next workday
-    if (elements.autoAdvance.checked && newRemaining <= 0) {
+    if (elements.autoAdvance.checked && newRemaining <= advanceTolerance) {
       // Advance to next workday
       const current = new Date(date);
       current.setDate(current.getDate() + 1);
@@ -2362,6 +2380,14 @@ function navigateOverviewMonth(delta) {
   loadMonthOverview(overviewYear, overviewMonth);
 }
 
+// A day counts as met once its logged time is within the wiggle margin of the
+// target (2*wiggle per entry), matching the daily view's completion tolerance.
+function isDayMet(stats) {
+  if (!stats || !stats.loaded || stats.minutes <= 0) return false;
+  const tol = wiggleEnabled ? 2 * wiggleMaxMinutes * Math.max(1, stats.count || 1) : 0;
+  return stats.minutes >= dailyHoursTarget * 60 - tol;
+}
+
 function renderMonthCalendar() {
   const today = new Date().toISOString().split("T")[0];
   const monthNames = [
@@ -2403,7 +2429,7 @@ function renderMonthCalendar() {
     } else if (isWeekend) {
       cls += " day-weekend";
     } else if (stats && stats.loaded) {
-      if (stats.minutes >= dailyHoursTarget * 60) {
+      if (isDayMet(stats)) {
         cls += " day-met";
         metCount++;
       } else if (stats.minutes > 0) {
@@ -2421,7 +2447,7 @@ function renderMonthCalendar() {
       const h = Math.floor(stats.minutes / 60);
       const m = stats.minutes % 60;
       const label = m > 0 ? `${h}h${m}m` : `${h}h`;
-      const color = stats.minutes >= dailyHoursTarget * 60
+      const color = isDayMet(stats)
         ? "#57e2b0"
         : stats.minutes > 0 ? "#ffd166" : "#ff8f7a";
       hoursHtml = `<span class="overview-day-hours" style="color:${color}">${label}</span>`;
@@ -2467,7 +2493,7 @@ async function loadMonthOverview(year, month) {
   const cache = await getWorklogCache();
   for (const [date, cached] of Object.entries(cache)) {
     if (date >= startDate && date <= endDate && cached.worklogs) {
-      overviewDayStats[date] = { minutes: cached.totalMinutes, loaded: true };
+      overviewDayStats[date] = { minutes: cached.totalMinutes, count: cached.worklogs.length, loaded: true };
     }
   }
   renderMonthCalendar();
@@ -2526,7 +2552,7 @@ async function loadMonthOverview(year, month) {
     // Write results to overviewDayStats and cache
     for (const [date, { seconds, worklogs }] of Object.entries(dayAccum)) {
       const totalMinutes = Math.round(seconds / 60);
-      overviewDayStats[date] = { minutes: totalMinutes, loaded: true };
+      overviewDayStats[date] = { minutes: totalMinutes, count: worklogs.length, loaded: true };
       const sorted = worklogs.sort((a, b) => (a.started || "").localeCompare(b.started || ""));
       await setCachedWorklogs(date, sorted, totalMinutes);
     }
@@ -2538,7 +2564,7 @@ async function loadMonthOverview(year, month) {
       const dateStr = cursor.toISOString().split("T")[0];
       const dow = cursor.getDay();
       if (dow !== 0 && dow !== 6 && !overviewDayStats[dateStr]) {
-        overviewDayStats[dateStr] = { minutes: 0, loaded: true };
+        overviewDayStats[dateStr] = { minutes: 0, count: 0, loaded: true };
       }
       cursor.setDate(cursor.getDate() + 1);
     }
