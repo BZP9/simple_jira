@@ -929,7 +929,16 @@ const FETCH_GUARD_MS = 60 * 1000;
 
 async function getFetchGuardState() {
   const stored = await browser.storage.local.get([FETCH_GUARD_KEY]);
-  return stored[FETCH_GUARD_KEY] || { lastFetchAt: {}, lastFetchSeq: {}, mutationSeq: 0 };
+  const state = stored[FETCH_GUARD_KEY] || {};
+  // Normalize defensively rather than trusting the stored shape: storage may
+  // hold an object saved by an earlier schema version (e.g. the original
+  // {lastFetchAt, lastMutationAt} shape before mutationSeq replaced it), or be
+  // partially written. Missing fields default to empty rather than crashing.
+  return {
+    lastFetchAt: state.lastFetchAt || {},
+    lastFetchSeq: state.lastFetchSeq || {},
+    mutationSeq: state.mutationSeq || 0
+  };
 }
 
 async function isScopeFresh(scopeKey) {
