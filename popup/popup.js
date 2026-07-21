@@ -419,6 +419,25 @@ function updateTimeChip() {
   elements.timeChipText.textContent = `${start} → ${end} · ${durText}${wiggleTag}`;
 }
 
+// Several fixed pivot regions, each its own oval orbit (center, distinct
+// x/y radii so it's an ellipse not a circle, a tilt, and its own running
+// phase) — generated once per popup session, not from click position. Every
+// stir randomly picks one of these and advances ITS phase, so the pivot
+// wanders unpredictably between several distinct paths instead of repeating
+// one ellipse or jumping to wherever you happened to click. Centers/radii
+// are chosen to stay well clear of the edges (see clampPct below combined
+// with the wrap's own generous overscan), so the aurora is always
+// guaranteed to fully cover the UI no matter which pivot or phase is active.
+const AURORA_PIVOT_COUNT = 4;
+const auroraPivots = Array.from({ length: AURORA_PIVOT_COUNT }, () => ({
+  centerX: 30 + Math.random() * 40, // 30-70%
+  centerY: 30 + Math.random() * 40, // 30-70%
+  radiusX: 8 + Math.random() * 14,  // 8-22%
+  radiusY: 5 + Math.random() * 10,  // 5-15% — distinct range from radiusX, so it's an oval
+  tilt: Math.random() * 360,        // degrees, fixed orientation of this pivot's ellipse
+  phase: Math.random() * 360        // each pivot remembers its own progress independently
+}));
+
 // Stir the aurora like touching water: every click anywhere in the popup
 // (attached once, capture phase, in setupEventListeners) advances its
 // rotation by a big, fully randomized amount — magnitude and direction both
@@ -426,12 +445,14 @@ function updateTimeChip() {
 // rotation, not a spring back to 0), so each click leaves the aurora at a
 // new resting orientation instead of visibly snapping back afterward. Only
 // the brief "catching the light" filter flash is a one-shot animation; the
-// rotation itself is persistent, accumulating across clicks. Pivots near
-// wherever you actually clicked. Capture phase so it still fires even
-// through handlers elsewhere that call stopPropagation (e.g. the unpin
-// button, worklog action buttons).
+// rotation itself is persistent, accumulating across clicks. The pivot point
+// travels along one of the fixed oval paths above (a different one picked
+// at random each time) rather than the click position, so it's always
+// within the safe band regardless of where in the popup you clicked.
+// Capture phase so it still fires even through handlers elsewhere that call
+// stopPropagation (e.g. the unpin button, worklog action buttons).
 let auroraRotation = 0;
-function stirAurora(e) {
+function stirAurora() {
   const wrap = document.getElementById("aurora-wrap");
   if (!wrap) return;
 
@@ -439,15 +460,15 @@ function stirAurora(e) {
   // instantly snapping a big rotation into place with no transition.
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-  const hasPoint = e && typeof e.clientX === "number" && typeof e.clientY === "number";
-  // Clamp the pivot inward a bit: a huge rotation around a pivot right at the
-  // extreme edge/corner can swing the gradient layer's own edge into view
-  // despite the overscan margin; keeping the pivot within the middle band
-  // avoids that while still feeling anchored near the click.
-  const rawX = hasPoint ? (e.clientX / window.innerWidth) * 100 : 50;
-  const rawY = hasPoint ? (e.clientY / window.innerHeight) * 100 : 50;
-  const xPct = Math.max(20, Math.min(80, rawX));
-  const yPct = Math.max(20, Math.min(80, rawY));
+  const pivot = auroraPivots[Math.floor(Math.random() * auroraPivots.length)];
+  pivot.phase = (pivot.phase + 40 + Math.random() * 70) % 360;
+  const rad = (pivot.phase * Math.PI) / 180;
+  const tiltRad = (pivot.tilt * Math.PI) / 180;
+  const ux = pivot.radiusX * Math.cos(rad);
+  const uy = pivot.radiusY * Math.sin(rad);
+  const xPct = pivot.centerX + (ux * Math.cos(tiltRad) - uy * Math.sin(tiltRad));
+  const yPct = pivot.centerY + (ux * Math.sin(tiltRad) + uy * Math.cos(tiltRad));
+
   const sign = Math.random() < 0.5 ? 1 : -1;
   const magnitude = 60 + Math.random() * 80; // 60..140 degrees — a real sweep, not a wiggle
 
