@@ -1666,7 +1666,14 @@ function setSmartStartTime() {
     }
 
     if (latestEndMinutes > 0) {
-      startMinutes = latestEndMinutes;
+      // The logged end time may be wiggled off a round mark (e.g. 11:55
+      // instead of 12:00) — snap it back before deriving the next default
+      // start, so a wiggled end near lunch/day boundary still jumps the
+      // next session to 13:00 instead of restarting at 11:55. This only
+      // affects the computed default, not the worklog that was submitted.
+      startMinutes = wiggleEnabled
+        ? snapToHalfHour(latestEndMinutes, wiggleMaxMinutes)
+        : latestEndMinutes;
     }
   }
 
@@ -1687,10 +1694,11 @@ function setSmartStartTime() {
 }
 
 // Snap a wiggled time (minutes since midnight) to the nearest :00 or :30 mark
-// if it's already within `maxDist` minutes of one — used to correct near-miss
-// wiggle results (e.g. 11:56 with wiggle=10 snaps to 12:00) instead of
-// leaving an odd few-minute gap, while times further from a half-hour mark
-// are left wiggled as-is.
+// if it's already within `maxDist` minutes of one. Used only when computing
+// the NEXT session's default start (setSmartStartTime) so a wiggled end near
+// a boundary (e.g. logged end 11:56) still jumps the next default to 12:00 /
+// past lunch, instead of restarting from the odd wiggled minute. Never
+// applied to the time actually being submitted.
 function snapToHalfHour(minutes, maxDist) {
   const remainder = ((minutes % 30) + 30) % 30;
   if (remainder === 0) return minutes;
@@ -1826,12 +1834,10 @@ async function submitWorklog() {
   // a bounded amount — worst case total = target - 2*wiggle*entries. This
   // undershoot is intentional (accepted margin) and predictable by design.
   //
-  // Correction: if the wiggled start or end lands WITHIN wiggle range of a
-  // :00 or :30 mark, snap it to that mark instead of leaving a near-round
-  // result sitting a few minutes off (e.g. wiggled end 11:56 with wiggle=10
-  // snaps to 12:00, rather than leaving a 4-minute gap the next entry would
-  // otherwise have to account for). Still looks hand-entered the rest of the
-  // time, since only near-misses get corrected.
+  // No snapping here — the submitted record should keep its full wiggle
+  // drift (that's what makes it look hand-entered). Correcting near-round
+  // results back to :00/:30 happens later, only when computing the NEXT
+  // session's default start time (setSmartStartTime), not on the logged data.
   let startForLog = start;
   if (wiggleEnabled && durationMinutes > 0) {
     const wiggleStart = Math.floor(Math.random() * (wiggleMaxMinutes + 1));
@@ -1839,24 +1845,10 @@ async function submitWorklog() {
     const [sh, sm] = start.split(":").map(Number);
     const rawStartMinutes = sh * 60 + sm;
 
-    // Snap threshold is HALF the wiggle range, not the full range: if it
-    // matched the full range, every result would snap back to exactly the
-    // original round time whenever start/end already sit on a half-hour mark
-    // (the common case), neutering wiggle entirely. Halving it means only
-    // genuine near-misses correct, while larger jitters keep their drift.
-    const snapDist = Math.max(1, Math.floor(wiggleMaxMinutes / 2));
+    const startMinutesForLog = rawStartMinutes + wiggleStart;
+    const wiggledDuration = Math.max(1, durationMinutes - wiggleStart - wiggleEnd);
 
-    const startMinutesForLog = snapToHalfHour(rawStartMinutes + wiggleStart, snapDist);
-    // Duration must subtract the START SHIFT ACTUALLY APPLIED, not the
-    // originally-drawn wiggleStart — if snapping pulled the start back
-    // (partly or fully undoing the draw), reusing the pre-snap wiggleStart
-    // here would double-count that reduction and make the end land too
-    // early.
-    const actualStartShift = startMinutesForLog - rawStartMinutes;
-    const wiggledDuration = Math.max(1, durationMinutes - actualStartShift - wiggleEnd);
-    const endMinutesForLog = snapToHalfHour(startMinutesForLog + wiggledDuration, snapDist);
-
-    durationMinutes = Math.max(1, endMinutesForLog - startMinutesForLog);
+    durationMinutes = wiggledDuration;
     const nh = Math.floor(startMinutesForLog / 60) % 24;
     const nm = startMinutesForLog % 60;
     startForLog = `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
